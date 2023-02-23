@@ -197,6 +197,10 @@ kill_alive() {
 }
 
 update_kernel() {
+  # su -c /data/adb/box/scripts/box.tool upcore
+  meta=true
+  # for download clash premium / dev
+  dev=true
   network_check
   if [ $(uname -m) = "aarch64" ] ; then
     arch="arm64"
@@ -389,6 +393,8 @@ case "$1" in
     ;;
   upcore)
     update_kernel
+    chown ${box_user_group} ${bin_path}
+    chmod 6755 ${bin_path}
     ;;
   upyacd)
     update_dashboard
