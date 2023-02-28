@@ -138,11 +138,15 @@ run_box() {
   log info "starting ${bin_name} service."
   case "${bin_name}" in
     sing-box)
-      if [ "${network_mode}" = "mixed" ] || [ "${proxy_mode}" = "tun" ] ; then
-        sed -i 's/"auto_detect_interface": false/"auto_detect_interface": true/g' "${data_dir}/sing-box/config.json"
-      else
-        sed -i 's/"auto_detect_interface": true/"auto_detect_interface": false/g' "${data_dir}/sing-box/config.json"
-      fi
+      # if [ "${network_mode}" = "mixed" ] || [ "${proxy_mode}" = "tun" ] ; then
+        # awk '{gsub(/"auto_detect_interface": false/,"\"auto_detect_interface\": true")}1' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
+        # sleep 0.5
+        # awk '{gsub(/auto_route\": true/, "auto_route\": false"); print}' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
+      # else
+        # awk '{gsub(/"auto_detect_interface": true/,"\"auto_detect_interface\": false")}1' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
+      # fi
+
+      sleep 1
       if ${bin_path} check -D "${data_dir}/${bin_name}" > "${run_path}/${bin_name}-report.log" 2>&1 ; then
         ulimit -n 65535
         nohup setuidgid 0:3005 ${bin_path} run -D "${data_dir}/${bin_name}" > "${run_path}/${bin_name}.log" 2>&1 &
@@ -159,7 +163,6 @@ run_box() {
       else
         awk -v new_val="mixed" '/network_mode/ {$0 = "network_mode=\"" new_val "\""} 1' ${settings} > ${data_dir}/tmp && mv ${data_dir}/tmp ${settings}
       fi
-      
       if ${bin_path} -t -d "${data_dir}/${bin_name}" -f "${clash_config}" > "${run_path}/${bin_name}-report.log" 2>&1; then
         ulimit -n 65535
         nohup setuidgid 0:3005 ${bin_path} -d "${data_dir}/${bin_name}" -f "${clash_config}" > "${run_path}/${bin_name}.log" 2>&1 &
@@ -175,7 +178,6 @@ run_box() {
         log error "file ${data_dir}/${bin_name}/*.json not found"
         exit 1
       fi
-      
       export XRAY_LOCATION_ASSET="${data_dir}/${bin_name}"
       export XRAY_LOCATION_CONFDIR="${data_dir}/${bin_name}"
       
@@ -194,10 +196,8 @@ run_box() {
         log error "file ${data_dir}/v2ray/*.json not found"
         exit 1
       fi
-
       export V2RAY_LOCATION_ASSET=${data_dir}/${bin_name}
       export V2RAY_LOCATION_CONFDIR=${data_dir}/${bin_name}
-
       if (${bin_path} test > "${run_path}/${bin_name}-report.log" 2>&1) ; then
         ulimit -n 65535
         nohup setuidgid 0:3005 ${bin_path} run > "${run_path}/${bin_name}.log" 2>&1 &
@@ -283,7 +283,7 @@ start_box() {
       exit 1
     fi
   else
-    log info "${bin_name} service is not running"
+    log info "Good day"
   fi
 
   check_permission
