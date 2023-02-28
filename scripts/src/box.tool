@@ -194,7 +194,7 @@ update_subgeo() {
     flag=false
   fi
   
-  if [ "${bin_name}" = "clash" ] && [ "${auto_update_subscription}" = "true" ] && update_file "${clash_config}" "${subscription_url}"; then
+  if [ "${bin_name}" = "clash" ] && [ "${auto_updatesubscript}" = "true" ] && update_file "${clash_config}" "${subscription_url}"; then
     flag=true
     log debug "Downloading ${clash_config}"
   fi

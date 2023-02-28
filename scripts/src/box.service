@@ -19,12 +19,12 @@ delete_logs() {
 }
 
 crontab_geo() {
-  if [ "${auto_updategeox}" != "false" ] || [ "${auto_updatesubcript}" != "false" ] ; then
+  if [ "${auto_updategeox}" != "false" ] || [ "${auto_updatesubscript}" != "false" ]; then
     echo "${update_interval} ${scripts_dir}/box.tool subgeo" >> "${run_path}/root"
     log debug "Interval crontab geo and subscription (${update_interval})."
     log debug "${bin_name} geox (${auto_updategeox})."
     if [ "${bin_name}" = "clash" ]; then
-      log debug "${bin_name} subscription (${auto_updatesubcript})."
+      log debug "${bin_name} subscription (${auto_updatesubscript})."
     fi
   else
     log info "Crontab geox & subscription is disabled."
