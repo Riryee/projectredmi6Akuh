@@ -27,21 +27,25 @@ else
   ui_print "- Device sdk: $API"
 fi
 
-# check architecture
-if [ "$ARCH" != "arm" ] && [ "$ARCH" != "arm64" ] && [ "$ARCH" != "x86" ] && [ "$ARCH" != "x64" ]; then
-  abort "! Unsupported platform: $ARCH"
-else
-  ui_print "- Device platform: $ARCH"
-fi
+ui_print "- check architecture"
+case $ARCH in
+  arm|arm64|x86|x64)
+    ui_print "- Device platform: $ARCH"
+    ;;
+  *)
+    abort "! Unsupported platform: $ARCH"
+    ;;
+esac
 
 ui_print "- Installing Box for Magisk"
 
 if [ -d "/data/adb/box" ] ; then
     ui_print "- Backup box"
-    mkdir -p /data/adb/box/${latest}
-    mv /data/adb/box/* /data/adb/box/${latest}/
+    mkdir -p "/data/adb/box/${latest}"
+    mv /data/adb/box/* "/data/adb/box/${latest}/"
 fi
 
+ui_print "- Set architecture ${ARCH}"
 case "${ARCH}" in
   arm)
     architecture="armv7"
@@ -55,80 +59,84 @@ case "${ARCH}" in
   x64)
     architecture="amd64"
     ;;
+  *)
+    abort "Error: Unsupported architecture ${ARCH}"
+    ;;
 esac
 
-ui_print "- Mkdir BFM folder"
-mkdir -p ${MODPATH}/system/bin
-mkdir -p ${MODPATH}/system/etc/security/cacerts
-mkdir -p /data/adb/box
-mkdir -p /data/adb/box/bin
-mkdir -p /data/adb/box/run
-mkdir -p /data/adb/box/scripts
-mkdir -p /data/adb/box/xray
-mkdir -p /data/adb/box/v2fly
-mkdir -p /data/adb/box/sing-box
-mkdir -p /data/adb/box/clash
-mkdir -p /data/adb/box/clash/dashboard
-mkdir -p /data/adb/box/sing-box/dashboard
+ui_print "- Create directories"
+mkdir -p "${MODPATH}/system/bin"
+mkdir -p "${MODPATH}/system/etc/security/cacerts"
+mkdir -p "/data/adb/box"
+mkdir -p "/data/adb/box/bin"
+mkdir -p "/data/adb/box/run"
+mkdir -p "/data/adb/box/scripts"
+mkdir -p "/data/adb/box/xray"
+mkdir -p "/data/adb/box/v2fly"
+mkdir -p "/data/adb/box/sing-box"
+mkdir -p "/data/adb/box/clash"
+mkdir -p "/data/adb/box/clash/dashboard"
+mkdir -p "/data/adb/box/sing-box/dashboard"
 
-ui_print "- Extracting BFM files"
-unzip -o "${ZIPFILE}" -x 'META-INF/*' -d ${MODPATH} >&2
-unzip -j -o "${ZIPFILE}" 'uninstall.sh' -d ${MODPATH} >&2
+ui_print "- Ekstrak file ZIP dan skip folder META-INF ke dalam folder MODPATH"
+unzip -o "${ZIPFILE}" -x 'META-INF/*' -d "${MODPATH}" >&2
+
+ui_print "- Ekstrak file uninstall.sh dan box_service.sh ke dalam folder MODPATH dan /data/adb/service.d"
+unzip -j -o "${ZIPFILE}" 'uninstall.sh' -d "${MODPATH}" >&2
 unzip -j -o "${ZIPFILE}" 'box_service.sh' -d /data/adb/service.d >&2
-tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 -C ${MODPATH}/system/bin >&2
-tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 "mlbox" -C /data/adb/box/bin >&2
+
+ui_print "- Ekstrak file dari arsip binary dan salin ke folder /system/bin dan /data/adb/box/bin"
+tar -xjf "${MODPATH}/binary/${ARCH}.tar.bz2" -C "${MODPATH}/system/bin" >&2
+tar -xjf "${MODPATH}/binary/${ARCH}.tar.bz2" "mlbox" -C /data/adb/box/bin >&2
+
 # tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 "xray" -C /data/adb/box/bin >&2
 # tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 "clash" -C /data/adb/box/bin >&2
 # tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 "v2fly" -C /data/adb/box/bin >&2
 # tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 "sing-box" -C /data/adb/box/bin >&2
 
-ui_print "- Extract Dashboard"
+ui_print "- Ekstrak file dashboard.zip ke dalam folder /data/adb/box/clash/dashboard dan /data/adb/box/sing-box/dashboard"
+unzip -o "${MODPATH}/dashboard.zip" -d /data/adb/box/clash/dashboard/ >&2
+unzip -o "${MODPATH}/dashboard.zip" -d /data/adb/box/sing-box/dashboard >&2
 unzip -o ${MODPATH}/dashboard.zip -d /data/adb/box/clash/dashboard/ >&2
 unzip -o ${MODPATH}/dashboard.zip -d /data/adb/box/sing-box/dashboard >&2
 
-ui_print "- Create resolv.conf"
-if [ ! -f "/system/etc/resolv.conf" ] ; then
-  touch ${MODPATH}/system/etc/resolv.conf
-  echo nameserver 8.8.8.8 > ${MODPATH}/system/etc/resolv.conf
-  echo nameserver 8.8.4.4 >> ${MODPATH}/system/etc/resolv.conf
-  echo nameserver 1.1.1.1 >> ${MODPATH}/system/etc/resolv.conf
-  echo nameserver 1.0.0.1 >> ${MODPATH}/system/etc/resolv.conf
+ui_print "- Buat file resolv.conf jika belum ada dan tambahkan server nameserver"
+if [ ! -f "/data/adb/modules/box_for_magisk/system/etc/resolv.conf" ]; then
+  cat > "${MODPATH}/system/etc/resolv.conf" <<EOF
+nameserver 8.8.8.8
+nameserver 94.140.14.14
+nameserver 1.1.1.1
+nameserver 9.9.9.9
+EOF
 fi
 
 ui_print "- Move BFM files"
-mv ${MODPATH}/scripts/cacert.pem ${MODPATH}/system/etc/security/cacerts
-# mv ${MODPATH}/scripts/bin/mlbox /data/adb/box/bin/
-mv ${MODPATH}/scripts/src/* /data/adb/box/scripts/
-mv ${MODPATH}/scripts/clash/* /data/adb/box/clash/
-mv ${MODPATH}/scripts/settings.ini /data/adb/box/
-# mv ${MODPATH}/scripts/template.yml /data/adb/box/
-mv ${MODPATH}/scripts/xray /data/adb/box/
-mv ${MODPATH}/scripts/v2fly /data/adb/box/
-mv ${MODPATH}/scripts/sing-box /data/adb/box/
+mv "$MODPATH/scripts/cacert.pem" "$MODPATH/system/etc/security/cacerts"
+mv "$MODPATH/scripts/src/"* "/data/adb/box/scripts/"
+mv "$MODPATH/scripts/clash/"* "/data/adb/box/clash/"
+mv "$MODPATH/scripts/settings.ini" "/data/adb/box/"
+mv "$MODPATH/scripts/xray" "/data/adb/box/"
+mv "$MODPATH/scripts/v2fly" "/data/adb/box/"
+mv "$MODPATH/scripts/sing-box" "/data/adb/box/"
 
 ui_print "- Delete leftover files"
-rm -rf ${MODPATH}/scripts
-rm -rf ${MODPATH}/binary
-rm -rf ${MODPATH}/box_service.sh
-rm -rf ${MODPATH}/dashboard.zip
+rm -rf "${MODPATH}/scripts"
+rm -rf "${MODPATH}/binary"
+rm -f "${MODPATH}/box_service.sh"
+rm -f "${MODPATH}/dashboard.zip"
 sleep 1
-ui_print "- Setting permissions"
-set_perm_recursive ${MODPATH} 0 0 0755 0644
-set_perm_recursive /data/adb/box/ 0 3005 0755 0644
-set_perm_recursive /data/adb/box/scripts/ 0 3005 0755 0700
-# set_perm_recursive /data/adb/box/dashboard/ 0 3005 0755 0700
-set_perm  /data/adb/service.d/box_service.sh  0  0  0755
-set_perm  ${MODPATH}/service.sh  0  0  0755
-set_perm  ${MODPATH}/uninstall.sh  0  0  0755
-set_perm  ${MODPATH}/system/etc/security/cacerts/cacert.pem 0 0 0644
-set_perm /data/adb/box/bin/mlbox   0  0  0755
-set_perm /data/adb/box/scripts/box.service   0  0  0755
-set_perm /data/adb/box/scripts/box.tool   0  0  0755
-set_perm /data/adb/box/scripts/start.sh   0  0  0755
-set_perm /data/adb/box/scripts/box.iptables   0  0  0755
-set_perm /data/adb/box/scripts/box.inotify   0  0  0755
 
+ui_print "- Setting permissions"
+set_perm_recursive "${MODPATH}" 0 0 0755 0644
+set_perm_recursive "/data/adb/box/" 0 3005 0755 0644
+set_perm_recursive "/data/adb/box/scripts/" 0 3005 0755 0700
+set_perm "/data/adb/service.d/box_service.sh"  0  0  0755
+set_perm "${MODPATH}/service.sh"  0  0  0755
+set_perm "${MODPATH}/uninstall.sh"  0  0  0755
+set_perm "${MODPATH}/system/etc/security/cacerts/cacert.pem" 0 0 0644=
+chmod ugo+x /data/adb/box/*
 chmod ugo+x /data/adb/box/bin/*
+chmod ugo+x /data/adb/box/scripts/*
 chmod ugo+x ${MODPATH}/system/bin/*
 ui_print "- Installation is complete, reboot your device"
 ui_print " --- Notes --- "

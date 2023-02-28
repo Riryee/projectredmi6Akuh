@@ -9,7 +9,7 @@ user_agent="${bin_name}"
 # membuat log pada terminal
 logs() {
   export TZ=Asia/Jakarta
-  now=$(date +"%I.%M %p %z")
+  now=$(date +"%I.%M %p %Z")
   if [ -t 1 ]; then
     case $1 in
       info) echo -n "\033[1;34m${now} [info]: $2\033[0m";;
@@ -189,12 +189,12 @@ update_subgeo() {
     ;;
   esac
 
-  if [ "${auto_updategeox}" = "true" ] && log debug "Downloading ${geoip_url}" && update_file "${geoip_file}" "${geoip_url}" && log debug "Downloading ${geosite_url}" && update_file "${geosite_file}" "${geosite_url}"; then
+  if [ "${auto_update_geox}" = "true" ] && log debug "Downloading ${geoip_url}" && update_file "${geoip_file}" "${geoip_url}" && log debug "Downloading ${geosite_url}" && update_file "${geosite_file}" "${geosite_url}"; then
     log debug "Update geo $(date +"%Y-%m-%d %I.%M %p")"
     flag=false
   fi
   
-  if [ "${bin_name}" = "clash" ] && [ "${auto_updatesubscript}" = "true" ] && update_file "${clash_config}" "${subscription_url}"; then
+  if [ "${bin_name}" = "clash" ] && [ "${auto_update_subscription}" = "true" ] && update_file "${clash_config}" "${subscription_url}"; then
     flag=true
     log debug "Downloading ${clash_config}"
   fi
@@ -498,6 +498,38 @@ cp_bin() {
   fi
 }
 
+reload() {
+  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "sing-box" ]; then
+    case "${bin_name}" in
+      sing-box)
+        if ${bin_path} check -D "${data_dir}/${bin_name}" > "${run_path}/${bin_name}-report.log" 2>&1; then
+          log info "config.json passed"
+        else
+          log error "config.json check failed"
+          cat "${run_path}/${bin_name}-report.log"
+          exit 1
+        fi
+        ;;
+      clash)
+        if ${bin_path} -t -d "${data_dir}/clash" -f "${clash_config}" > "${run_path}/${bin_name}-report.log" 2>&1; then
+          log info "config.yaml passed"
+        else
+          log error "config.yaml check failed"
+          cat "${run_path}/${bin_name}-report.log"
+          exit 1
+        fi
+        ;;
+      *)
+        log error "Unknown binary: ${bin_name}"
+        exit 1
+        ;;
+    esac
+    log info "Open yacd-meta/configs and click 'Reload Configs'"
+  else
+    log error "This script is only for clash or sing-box binaries"
+  fi
+}
+
 case "$1" in
   testing)
     testing
@@ -528,8 +560,11 @@ case "$1" in
     find "${data_dir}/${bin_name}" -type f -name "*.db.bak" -delete
     find "${data_dir}/${bin_name}" -type f -name "*.dat.bak" -delete
     ;;
+  reload)  
+    reload
+    ;;
   *)
-    echo "$0: usage: $0 {testing|keepdns|connect|rbase64|upyacd|upcore|cgroup|port|subgeo}"
+    echo "$0: usage: $0 {reload|testing|keepdns|connect|rbase64|upyacd|upcore|cgroup|port|subgeo}"
     exit 1
     ;;
 esac

@@ -6,15 +6,33 @@ source /data/adb/box/settings.ini
 
 # set -euo pipefail
 
-# Deklarasi variabel lokal
+# Variabel yang digunakan
 table='223'
 fwmark='222'
 pref='100'
+# Inisialisasi variabel
+clash_fake_ip_range=""
+clash_dns_port=""
+# sesuai dengan nama tun di konfigurasi anda, Clash.Premium default "utun"
+tun_device="utun"
 
-# Mengambil nilai dari konfigurasi clash
-clash_fake_ip_range=$(grep 'fake-ip-range:' "${clash_config}" | awk -F ': ' '{print $2}')
-clash_dns_port=$(grep 'listen:' "${clash_config}" | awk -F ':' '{print $3}')
-clash_stack=$(grep 'stack:' "${clash_config}" | awk -F ': ' '{print $2}')
+# Mencari nilai dari blok "fake-ip-range: / listen: / device:" dalam file konfigurasi YAML
+clash_fake_ip_range=$(awk '/fake-ip-range: / { print $2; exit }' "${clash_config}")
+clash_dns_port=$(awk -F ':' '/listen:/ { print $3; exit }' "${clash_config}")
+# tun_device=$(awk '/device: / { print $2; exit }' "${clash_config}")
+
+probe_empty () {
+if [ "${bin_name}" = "clash" ]; then
+  if [ -z "${clash_fake_ip_range}" ] && [ -z "${clash_fake_ip_range}" ] ; then
+    log info "Tidak dapat menemukan nilai dari blok 'listen/fake-ip-range' dalam file konfigurasi YAML."
+    exit 1
+  else
+  # Menampilkan hasil
+    log debug "Ip dari clash_fake_ip_range: ${clash_fake_ip_range}"
+    log debug "port dari clash_dns_port: ${clash_dns_port}"
+  fi
+fi
+}
 
 probe_user_group() {
   if bin_pid=$(pidof ${bin_name}) ; then
@@ -74,12 +92,17 @@ intranet6=(
   ff00::/8
 )
 
-network_port () {
-  if [ "${network_mode}" = "tproxy" ] && [ "${proxy_mode}" != "tun" ] ; then
-    /system/bin/netstat -tnulp | grep -q "${tproxy_port}" || log error "tproxy_port out of sync with config"
+network_port() {
+  if [ "${network_mode}" = "tproxy" ] && [ "${proxy_mode}" != "tun" ]; then
+    /system/bin/netstat -tnulp | grep -q "${tproxy_port}" && \
+      log info "tproxy_port: ${tproxy_port} is in sync with config" || \
+      log error "tproxy_port: ${tproxy_port} out of sync with config"
   fi
-  if [ "${network_mode}" = "mixed" ] || [ "${proxy_mode}" = "tun" ] ; then
-    /system/bin/ifconfig | grep -q "${tun_device}" || log error "tun_device: "${tun_device}" not found"
+
+  if [ "${network_mode}" = "mixed" ] || [ "${proxy_mode}" = "tun" ]; then
+    /system/bin/ifconfig | grep -q "${tun_device}" && \
+     log info "using tun device: '${tun device}' " || \
+     log error "tun_device: '${tun_device}' not found"
   fi
 }
 
@@ -159,7 +182,7 @@ start_redirect() {
         done < "${uid_list[*]}"
         
         # close the file handle for the UID list
-        exec <&-
+        # exec <&-
         
         # Allow !app
         ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports "${redir_port}"
@@ -174,7 +197,7 @@ start_redirect() {
       done < "${uid_list[*]}"
 
       # close the file handle for the UID list
-      exec <&-
+      # exec <&-
 
       ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports "${redir_port}"
       ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j REDIRECT --to-ports "${redir_port}"
@@ -347,7 +370,7 @@ start_tproxy() {
       done < "${uid_list[*]}"
 
       # close the file handle for the UID list
-      exec <&-
+      # exec <&-
 
       # Allow !app
       ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-mark "${fwmark}"
@@ -364,7 +387,7 @@ start_tproxy() {
     done < "${uid_list[*]}"
      
     # close the file handle for the UID list
-    exec <&-
+    # exec <&-
 
     ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j MARK --set-mark "${fwmark}"
     ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 0 -j MARK --set-mark "${fwmark}"
@@ -468,15 +491,19 @@ stop_tproxy() {
   
     ${iptables} -t nat -F CLASH_DNS_LOCAL
     ${iptables} -t nat -X CLASH_DNS_LOCAL
-  
-    ${iptables} -t nat -D OUTPUT -d "${clash_fake_ip_range}" -p icmp -j DNAT --to-destination 127.0.0.1
-    ${iptables} -t nat -D PREROUTING -d "${clash_fake_ip_range}" -p icmp -j DNAT --to-destination 127.0.0.1
+
+
+    ${iptables} -t nat -D OUTPUT -p icmp -d "${clash_fake_ip_range}" -j DNAT --to-destination 127.0.0.1
+    ${iptables} -t nat -D PREROUTING -p icmp -d "${clash_fake_ip_range}" -j DNAT --to-destination 127.0.0.1
+    # ${iptables} -t nat -D OUTPUT -d "${clash_fake_ip_range}" -p icmp -j DNAT --to-destination 127.0.0.1
+    # ${iptables} -t nat -D PREROUTING -d "${clash_fake_ip_range}" -p icmp -j DNAT --to-destination 127.0.0.1
   fi
 }
 
 if [ "${proxy_mode}" != "tun" ] ; then
   case "$1" in
     enable)
+      probe_empty
       network_port
       probe_user_group || log error "failed to check Box user group, please make sure ${bin_name} kernel is started."
       #ipv4
@@ -556,6 +583,7 @@ if [ "${proxy_mode}" != "tun" ] ; then
       ${scripts_dir}/box.tool testing
       ;;
     renew)
+      probe_empty
       network_port
       probe_user_group || log error "failed to check Box user group, please make sure ${bin_name} kernel is started."
       log warn "cleaning up iptables transparent proxy rules."

@@ -4,27 +4,29 @@ scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
 source /data/adb/box/settings.ini
 
-delete_logs() {
-  for list in "${bin_list[@]}" ; do
-      rm -rf "${run_path}/${list}.log"
-  done
-  find "${run_path}" -type f -name "root" | xargs rm -f
-  find "${run_path}" -type f -name "*.yaml" | xargs rm -f
-  find "${run_path}" -type f -name "*.list" | xargs rm -f
-  find "${run_path}" -type f -name "*.inotify.log" | xargs rm -f
-  find "${run_path}" -type f -name "*-report.log" | xargs rm -f
 
-  # Delete the log three days ago
-  # find ${run_path} -mtime +3 -type f -name "*.log" | xargs rm -f
+delete_logs() {
+  # Delete logs for each bin in the list
+  log info "Deleting & Backup logs for ${bin_list[*]}"
+  for bin in "${bin_list[@]}" ; do
+    mv "${run_path}/${bin}.log" "${run_path}/${bin}-$(date +%Y-%m-%d-%H-%M-%S).logs"
+    rm -f "${run_path}/${bin}.log" || log warn "Error deleting ${bin}.log"
+  done
+  
+  # Delete other log files
+  find "${run_path}" -type f \( -name "root" -o -name "*.yaml" -o -name "*.list" -o -name "*.inotify.log" -o -name "*-report.log" \) -exec rm -f {} \; || log warn "Error deleting other log files"
+  
+  # Delete logs that are three days old or older
+  find "${run_path}" -type f -name "*.logs" -mtime +2 -exec rm -f {} \; || log warn "Error deleting old logs"
 }
 
 crontab_geo() {
-  if [ "${auto_updategeox}" != "false" ] || [ "${auto_updatesubscript}" != "false" ]; then
+  if [ "${auto_update_geox}" != "false" ] || [ "${auto_update_subscription}" != "false" ]; then
     echo "${update_interval} ${scripts_dir}/box.tool subgeo" >> "${run_path}/root"
     log debug "Interval crontab geo and subscription (${update_interval})."
-    log debug "${bin_name} geox (${auto_updategeox})."
+    log debug "${bin_name} geox (${auto_update_geox})."
     if [ "${bin_name}" = "clash" ]; then
-      log debug "${bin_name} subscription (${auto_updatesubscript})."
+      log debug "${bin_name} subscription (${auto_update_subscription})."
     fi
   else
     log info "Crontab geox & subscription is disabled."
@@ -36,11 +38,17 @@ detected_port() {
 }
 
 still_alive() {
-  if ! pidof ${bin_name} > /dev/null 2>&1 ; then
-    log error "${bin_name} service is not running." 
+  if ! pid=$(pidof ${bin_name} 2>/dev/null); then
+    log error "${bin_name} service is not running."
     log error "Please check ${bin_name}.log for more information."
-    kill -9 $(pidof ${bin_name}) || killall -9 ${bin_name}
-    rm -rf ${pid_file}
+    exit 1
+  fi
+  
+  if ! kill -0 $pid 2>/dev/null; then
+    log error "${bin_name} service is not running."
+    log error "Killing stale pid ${pid}."
+    kill -9 $pid || killall -9 ${bin_name}
+    rm -f ${pid_file}
     exit 1
   fi
 }
@@ -48,73 +56,85 @@ still_alive() {
 check_permission() {
   if [ "${box_user_group}" = "root:net_admin" ] ; then
     if [ ! -f ${bin_path} ] ; then
-      log error "kernel ${bin_name} is missing"
-      log error "please download and place it in the ${bin_path} directory."
+      log error "Kernel ${bin_name} is missing."
+      log error "Please download and place it in the ${bin_path} directory."
       exit 1
     fi
+    # Set ownership and permission of kernel directory
     chown ${box_user_group} ${bin_path}
     chmod 6755 ${bin_path}
+    # Set ownership of data directory
     chown -R ${box_user_group} ${data_dir}
-    log info "using kernel directory ${bin_name} in ${bin_path}"
+    log info "Using kernel directory ${bin_name} in ${bin_path}"
   else
     if which ${bin_name} | grep -q "/system/bin/" ; then
       box_user=$(echo ${box_user_group} | awk -F ':' '{print $1}')
       box_group=$(echo ${box_user_group} | awk -F ':' '{print $2}')
       box_user_id=$(id -u ${box_user})
       box_group_id=$(id -g ${box_group})
+      # Check if box_user and box_group exist
       if [ ${box_user_id} ] && [ ${box_group_id} ] ; then
+        bin_path=$(which ${bin_name})
+        # Set ownership and permission of kernel directory
         chown ${box_user_group} ${bin_path}
         chmod 6755 ${bin_path}
+        # Check if user is not root and group is not net_admin
         if [ "${box_user_id}" != "0" ] || [ "${box_group_id}" != "3005" ] ; then
-          # setcap has been deprecated as it does not support binary outside of the /system/bin directory
-          setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || \
-            (box_user_group="root:net_admin" && log error "setcap authorization failed, you may need libcap package.")
+          # Set capability of kernel directory
+          if command -v setcap > /dev/null; then
+            setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || \
+              (box_user_group="root:net_admin" && log error "setcap authorization failed, you may need libcap package.")
+          else
+            box_user_group="root:net_admin"
+            log warn "setcap authorization failed, you may need libcap package. Using root:net_admin instead."
+          fi
         fi
-        log info "using kernel directory ${bin_name} in ${bin_path}"
+        # Set ownership of data directory
         chown -R ${box_user_group} ${data_dir}
+        log info "Using kernel directory ${bin_name} in ${bin_path}"
       else
+        bin_path=$(which ${bin_name})
         box_user_group="root:net_admin"
-        log warn "${box_user_group} error, use root:net_admin instead."
+        log warn "${box_user_group} error. Using root:net_admin instead."
+        # Set ownership and permission of kernel directory
         chown ${box_user_group} ${bin_path}
         chmod 6755 ${bin_path}
+        # Set ownership of data directory
         chown -R ${box_user_group} ${data_dir}
-        log info "using kernel directory ${bin_name} in ${bin_path}"
+        log info "Using kernel directory ${bin_name} in ${bin_path}"
       fi
     else
-      log error "kernel ${bin_name} is missing"
-      log error "please download kernel"
-      log error "replace it in the /data/adb/modules/box_for_magisk/system/bin/${bin_name} directory. and reboot "
+      log error "Kernel ${bin_name} is missing."
+      log error "Please download kernel, replace it in the /data/adb/modules/box_for_magisk/system/bin/${bin_name} directory, and reboot."
       exit 1
     fi
   fi
 }
 
 check_in_bin() {
+  if ! command -v "${bin_path}" >/dev/null 2>&1; then
+    log error "Error: '${bin_path}' not found or not executable."
+    exit 1
+  fi
+
+  if [ ! -f "${bin_path}" ] || [ ! -x "${bin_path}" ]; then
+    log error "Error: '${bin_path}' is not a valid file or cannot be executed."
+    exit 1
+  fi
+
   case "${bin_name}" in
     clash)
-      test_version=$(${bin_path} -v | grep -v 'clash')
-      if ! echo "${test_version}" | grep -qi 'clash'; then
-        log error "kernel ${bin_name} corrupted."
-      else
-        log info "${test_version}"
+      if ! "${bin_path}" -v >/dev/null 2>&1; then
+        log error "Error: '${bin_name}' version information not available."
+        exit 1
       fi
-  		;;
-    sing-box)
-      test_version=$(${bin_path} version | grep "${bin_name}")
-      if echo "${test_version}" | grep -qi "${bin_name}"; then
-          log info "$(${bin_path} version)"
-      else
-          log error "kernel ${bin_name} corrupted."
-      fi
-      ;;
+      log info "$(${bin_path} -v)";;
     *)
-      test_version=$(${bin_path} version | grep -v "${bin_name}")
-      if echo "${test_version}" | grep -qi "${bin_name}"; then
-          log info "$(${bin_path} version)"
-      else
-          log error "kernel ${bin_name} corrupted."
+      if ! "${bin_path}" version >/dev/null 2>&1; then
+        echo "Error: '${bin_name}' version information not available."
+        exit 1
       fi
-      ;;
+      log info "$(${bin_path} version)";;
   esac
 }
 
@@ -145,17 +165,17 @@ run_box() {
       # else
         # awk '{gsub(/"auto_detect_interface": true/,"\"auto_detect_interface\": false")}1' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
       # fi
-
-      sleep 1
+      # sleep 1
       if ${bin_path} check -D "${data_dir}/${bin_name}" > "${run_path}/${bin_name}-report.log" 2>&1 ; then
-        ulimit -n 65535
+        ulimit -SHn 65535
         nohup setuidgid 0:3005 ${bin_path} run -D "${data_dir}/${bin_name}" > "${run_path}/${bin_name}.log" 2>&1 &
         echo -n $! > "${pid_file}"
       else
-        log error "configuration failed, please check the ${run_path}/${bin_name}-report.log file."
+        log error "Configuration failed, please check the ${run_path}/${bin_name}-report.log file." >&2
         exit 1
       fi
       ;;
+      
     clash)
       if [ "${clash_tun_status}" != "true" ] ; then
         awk -v tproxy_port="${tproxy_port}" '/tproxy-port:/ {$2=tproxy_port} {print}' ${clash_config} > ${data_dir}/tmp && mv ${data_dir}/tmp ${clash_config}
@@ -164,7 +184,7 @@ run_box() {
         awk -v new_val="mixed" '/network_mode/ {$0 = "network_mode=\"" new_val "\""} 1' ${settings} > ${data_dir}/tmp && mv ${data_dir}/tmp ${settings}
       fi
       if ${bin_path} -t -d "${data_dir}/${bin_name}" -f "${clash_config}" > "${run_path}/${bin_name}-report.log" 2>&1; then
-        ulimit -n 65535
+        ulimit -SHn 65535
         nohup setuidgid 0:3005 ${bin_path} -d "${data_dir}/${bin_name}" -f "${clash_config}" > "${run_path}/${bin_name}.log" 2>&1 &
         echo -n $! > "${pid_file}"
       else
@@ -172,6 +192,7 @@ run_box() {
         exit 1
       fi
       ;;
+      
     xray)
       default_tp
       if [ ! -f "${data_dir}/${bin_name}"/*.json ]; then
@@ -182,7 +203,7 @@ run_box() {
       export XRAY_LOCATION_CONFDIR="${data_dir}/${bin_name}"
       
       if ${bin_path} -test > "${run_path}/${bin_name}-report.log" 2>&1; then
-        ulimit -n 65535
+        ulimit -SHn 65535
         nohup setuidgid 0:3005 ${bin_path} > "${run_path}/${bin_name}.log" 2>&1 &
         echo -n $! > "${pid_file}"
       else
@@ -190,6 +211,7 @@ run_box() {
         exit 1
       fi
     ;;
+    
     v2fly)
       default_tp
       if [ ! -f "${data_dir}/${bin_name}"/*.json ] ; then
@@ -199,7 +221,7 @@ run_box() {
       export V2RAY_LOCATION_ASSET=${data_dir}/${bin_name}
       export V2RAY_LOCATION_CONFDIR=${data_dir}/${bin_name}
       if (${bin_path} test > "${run_path}/${bin_name}-report.log" 2>&1) ; then
-        ulimit -n 65535
+        ulimit -SHn 65535
         nohup setuidgid 0:3005 ${bin_path} run > "${run_path}/${bin_name}.log" 2>&1 &
         echo -n $! > ${pid_file}
       else
@@ -227,55 +249,113 @@ else
 fi
 }
 
+# Function to display the usage of a binary
 bin_usage() {
-  if bin_pid=$(pidof ${bin_name}) ; then
-    rss=$(grep VmRSS /proc/${bin_pid}/status | awk -F':' '{print $2}' | awk '{print $1}')
-    [ ${rss} -ge 1024 ] && bin_rss="$(expr ${rss} / 1024)Mb" || bin_rss="${rss}Kb"
-    swap=$(grep VmSwap /proc/${bin_pid}/status | awk -F':' '{print $2}' | awk '{print $1}')
-    [ ${swap} -ge 1024 ] && bin_swap="$(expr ${swap} / 1024)Mb" || bin_swap="${swap}Kb"
-    state=$(grep State /proc/${bin_pid}/status | awk -F':' '{print $2}' | awk '{print $2}')
-    log info "${bin_name} has started with the $(stat -c %U:%G /proc/${bin_pid}) user group."
-    log info "${bin_name} status: ${state}, PID: (${bin_pid})"
-    log info "${bin_name} memory usage: ${bin_rss}, swap: ${bin_swap}"
-    cpu=$(/system/bin/ps -p ${bin_pid} -o pcpu | grep -v %CPU | awk '{print $1}' 2> /dev/null)
-    [ -n "${cpu}" ] && log info "${bin_name} cpu usage: ${cpu}%" || log info "${bin_name} cpu usage: not available"
-    log info "${bin_name} running time: $(/system/bin/ps -p ${bin_pid} -o etime | awk 'NR==2 {print $1}') seconds"
-    echo -n ${bin_pid} > ${pid_file}
-  else
+  # Get the process ID of the binary
+  bin_pid=$(pidof ${bin_name})
+
+  if [ -z "${bin_pid}" ]; then
     log error "${bin_name} is not running"
+    return
   fi
+
+  # Get the memory usage of the binary
+  rss=$(grep VmRSS /proc/${bin_pid}/status | awk '{print $2}')
+  [ ${rss} -ge 1024 ] && bin_rss="$(expr ${rss} / 1024)Mb" || bin_rss="${rss}Kb"
+  swap=$(grep VmSwap /proc/${bin_pid}/status | awk '{print $2}')
+  [ ${swap} -ge 1024 ] && bin_swap="$(expr ${swap} / 1024)Mb" || bin_swap="${swap}Kb"
+
+  # Get the state of the binary
+  state=$(grep State /proc/${bin_pid}/status | awk '{print $2}')
+
+  # Get the user and group of the binary
+  user_group=$(stat -c %U:%G /proc/${bin_pid})
+
+  # Log the information
+  log info "${bin_name} has started with the ${user_group} user group."
+  log info "${bin_name} status: ${state}, PID: (${bin_pid})"
+  log info "${bin_name} memory usage: ${bin_rss}, swap: ${bin_swap}"
+
+  # Get the CPU usage of the binary
+  cpu=$(/system/bin/ps -p ${bin_pid} -o pcpu | awk 'NR==2{print $1}' 2> /dev/null)
+  if [ -n "${cpu}" ]; then
+    log info "${bin_name} cpu usage: ${cpu}%"
+  else
+    log info "${bin_name} cpu usage: not available"
+  fi
+
+  # Get the running time of the binary
+  running_time=$(/system/bin/ps -p ${bin_pid} -o etime | awk 'NR==2{print $1}' 2> /dev/null)
+  if [ -n "${running_time}" ]; then
+    log info "${bin_name} running time: ${running_time} seconds"
+  else
+    log info "${bin_name} running time: not available"
+  fi
+
+  # Save the process ID to the pid file
+  echo -n ${bin_pid} > ${pid_file}
 }
 
 display_bin_pid() {
-  if bin_pid=$(pidof ${bin_name}) ; then
-    bin_usage
+  # Mengecek apakah bin_name sudah didefinisikan
+  if [ -z "${bin_name}" ]; then
+    log error "bin_name: ${bin_name} tidak ditentukan"
+    return 1
+  fi
+  
+  # Mencari PID dari bin_name
+  bin_pid=$(pidof "${bin_name}")
+  
+  # Mengecek apakah bin_name sedang berjalan
+  if [ -n "${bin_pid}" ]; then
+    # Jika iya, mencetak pesan dan memanggil fungsi bin_usage
     log info "${bin_name} service is running. (PID: ${bin_pid})."
+    bin_usage
   else
-    log warn "${bin_name} service is stopped." && return 1
+    # Jika tidak, mencetak pesan dan mengembalikan status 1
+    log warn "${bin_name} service is stopped."
+    return 1
   fi
 }
 
 crontab_alive() {
-  nohup crond -c ${run_path} > /dev/null 2>&1 &
-  crontab -c ${run_path} -r
-  touch ${run_path}/root
-  chmod 0600 ${run_path}/root
-  [ "${static_dns1}" != "" ] && \
-    echo "*/1 * * * * ${scripts_dir}/box.tool keepdns" >> ${run_path}/root && log info "dns remains open."
-  [ "${bin_name}" = "clash" ] && \
-    log info "configuration ${clash_config}."
+  # Memulai crond dengan opsi "-c" dan menyimpannya di background
+  nohup crond -c "${run_path}" > /dev/null 2>&1 &
+  # Menghapus crontab sebelumnya dan membuat crontab baru
+  crontab -c "${run_path}" -r
+  touch "${run_path}/root"
+  chmod 0600 "${run_path}/root"
+  
+  # Menambahkan cron job untuk memanggil box.tool keepdns setiap menit
+  if [ "${intervaldns}" != "" ]; then
+    echo "${intervaldns} ${scripts_dir}/box.tool keepdns" >> "${run_path}/root"
+    log info "DNS remains open."
+  fi
+  
+  # Menampilkan pesan konfigurasi jika bin_name adalah "clash"
+  if [ "${bin_name}" = "clash" ]; then
+    log info "Configuration ${clash_config}."
+  fi
+  
+  # Menjalankan fungsi crontab_geo untuk menambahkan cron job berdasarkan lokasi geografis
   crontab_geo
 }
 
-start_box() {  
-  echo -n "" > ${logs_file}
-  [ -t 1 ] && echo "\033[1;31m$(date)\033[0m" || echo "$(date)" | tee -a ${logs_file} >> /dev/null 2>&1
-  line="--------------------------------------------" 
-  [ -t 1 ] && echo "\033[1;32m$line\033[0m" || echo "$line" | tee -a ${logs_file} >> /dev/null 2>&1
+start_box() {
+  # Mengosongkan file log dan menambahkan timestamp dan garis pembatas
+  echo -n "" > "${logs_file}"
+  if [ -t 1 ]; then
+    echo -e "\033[1;31m$(date)\033[0m"
+    echo -e "\033[1;32m--------------------------------------------\033[0m"
+  else
+    echo "$(date)" | tee -a "${logs_file}" > /dev/null 2>&1
+    echo "--------------------------------------------" | tee -a "${logs_file}" > /dev/null 2>&1
+  fi
 
-  if bin_pid=$(pidof ${bin_name}) ; then
+  # Memperbarui iptables jika bin_name masih berjalan
+  if bin_pid=$(pidof "${bin_name}"); then
     log info "${bin_name} service is still running, refreshing iptables"
-    if ${scripts_dir}/box.iptables renew; then
+    if "${scripts_dir}/box.iptables" renew; then
       log info "iptables refreshed successfully"
       exit 1
     else
@@ -286,13 +366,21 @@ start_box() {
     log info "Good day"
   fi
 
+  # Memeriksa izin, memeriksa keberadaan bin, menghapus log lama, membuat TUN, menjalankan box, dan menunggu selama 1 detik
   check_permission
   check_in_bin
   delete_logs
   create_tun
   run_box && sleep 1
-  [ "${crontab_sec}" != "false" ] && \
-    crontab_alive || log info "crontab: disable." 
+
+  # Menjalankan crontab_alive jika crontab_sec tidak sama dengan "false"
+  if [ "${crontab_sec}" != "false" ]; then
+    crontab_alive
+  else
+    log info "crontab: disabled."
+  fi
+
+  # Menjalankan cgroup_limit, menunggu selama 1 detik, mendeteksi port yang digunakan, menunggu selama 1 detik, dan menampilkan PID bin
   cgroup_limit
   sleep 1
   detected_port
@@ -302,55 +390,30 @@ start_box() {
 }
 
 stop_box() {
-  cronkill=$(/system/bin/ps -ef | grep root | grep "crond -c /data/adb/box/" | awk '{ print $2 }')
-  for cron in "${cronkill[@]}"; do
-    kill -9 "${cron}"
+  # Menggunakan perintah `pgrep` untuk mencari PID cronjob
+  cronkill=$(pgrep -f "crond -c ${run_path}")
+  for cron in ${cronkill[@]}; do
+    kill -15 ${cron}
   done
-  
-  for bin in "${bin_list[@]}"; do
+
+  # Menggunakan loop untuk membunuh setiap binary
+  for bin in ${bin_list[@]}; do
+    # Menggunakan `pkill` untuk membunuh binary
     kill -9 "$(pidof ${bin})" || killall -9 "${bin}"
   done
-  
+
   sleep 0.5
-  
-  if ! pidof "${bin_name}" >/dev/null 2>&1; then
-    find "${run_path}" -type f -name "box.pid" -delete
-    sleep 0.5
+
+  # Mengecek apakah binary sudah terhenti
+  if ! pidof ${bin_name} >/dev/null 2>&1; then
+    # Menghapus file `box.pid` jika ada
+    if [ -f ${run_path}/box.pid ]; then
+      rm ${run_path}/box.pid
+      sleep 0.5
+    fi
     display_bin_pid || log warn "${bin_name} disconnected."
   else
     log error "failed to stop ${bin_name}"
-  fi
-}
-
-reload() {
-  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "sing-box" ]; then
-    case "${bin_name}" in
-      sing-box)
-        if ${bin_path} check -D "${data_dir}/${bin_name}" > "${run_path}/${bin_name}-report.log" 2>&1; then
-          log info "config.json passed"
-        else
-          log error "config.json check failed"
-          cat "${run_path}/${bin_name}-report.log"
-          exit 1
-        fi
-        ;;
-      clash)
-        if ${bin_path} -t -d "${data_dir}/clash" -f "${clash_config}" > "${run_path}/${bin_name}-report.log" 2>&1; then
-          log info "config.yaml passed"
-        else
-          log error "config.yaml check failed"
-          cat "${run_path}/${bin_name}-report.log"
-          exit 1
-        fi
-        ;;
-      *)
-        log error "Unknown binary: ${bin_name}"
-        exit 1
-        ;;
-    esac
-    log info "Open yacd-meta/configs and click 'Reload Configs'"
-  else
-    log error "This script is only for clash or sing-box binaries"
   fi
 }
 
@@ -375,10 +438,7 @@ case "$1" in
     [ $(pidof ${bin_name}) ] && \
       bin_usage || log warn "${bin_name} service is stopped"
     ;;
-  reload)  
-    reload
-    ;;
   *)
-    echo "$0:  usage: $0 {start|testing|stop|restart|usage|reload}"
+    echo "$0:  usage: $0 {start|stop|restart|usage}"
     ;;
 esac
