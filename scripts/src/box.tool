@@ -6,125 +6,160 @@ source /data/adb/box/settings.ini
 
 user_agent="${bin_name}"
 
+# membuat log pada terminal
 logs() {
   export TZ=Asia/Jakarta
   now=$(date +"%I.%M %p %z")
-  case $1 in
-    info)[ -t 1 ] && echo -n "\033[1;34m${now} [info]: $2\033[0m" || echo -n "${now} [info]: $2" | tee -a ${logs_file} >> /dev/null 2>&1;;
-    port)[ -t 1 ] && echo -n "\033[1;33m$2 \033[0m" || echo -n "$2 " | tee -a ${logs_file} >> /dev/null 2>&1;;
-
-    testing)[ -t 1 ] && echo -n "\033[1;34m$2\033[0m" || echo -n "$2" | tee -a ${logs_file} >> /dev/null 2>&1;;
-    succes)[ -t 1 ] && echo -n "\033[1;32m$2 \033[0m" || echo -n "$2 " | tee -a ${logs_file} >> /dev/null 2>&1;;
-    failed)[ -t 1 ] && echo -n "\033[1;31m$2 \033[0m" || echo -n "$2 " | tee -a ${logs_file} >> /dev/null 2>&1;;
-
-    *)[ -t 1 ] && echo -n "\033[1;35m${now} [$1]: $2\033[0m" || echo -n "${now} [$1]: $2" | tee -a ${logs_file} >> /dev/null 2>&1;;
-  esac
+  if [ -t 1 ]; then
+    case $1 in
+      info) echo -n "\033[1;34m${now} [info]: $2\033[0m";;
+      port) echo -n "\033[1;33m$2 \033[0m";;
+      testing) echo -n "\033[1;34m$2\033[0m";;
+      success) echo -n "\033[1;32m$2 \033[0m";;
+      failed) echo -n "\033[1;31m$2 \033[0m";;
+      *) echo -n "\033[1;35m${now} [$1]: $2\033[0m";;
+    esac
+  else
+    case $1 in
+      info) echo -n "${now} [info]: $2" | tee -a ${logs_file} >> /dev/null 2>&1;;
+      port) echo -n "$2 " | tee -a ${logs_file} >> /dev/null 2>&1;;
+      testing) echo -n "$2" | tee -a ${logs_file} >> /dev/null 2>&1;;
+      success) echo -n "$2 " | tee -a ${logs_file} >> /dev/null 2>&1;;
+      failed) echo -n "$2 " | tee -a ${logs_file} >> /dev/null 2>&1;;
+      *) echo -n "${now} [$1]: $2" | tee -a ${logs_file} >> /dev/null 2>&1;;
+    esac
+  fi
 }
 
-testing () {
+# Memeriksa koneksi internet dengan mlbox
+testing() {
   logs info "dns="
-  for network in $(${data_dir}/bin/mlbox -timeout=5 -dns="-qtype=A -domain=asia.pool.ntp.org" | grep -v 'timeout' | grep -E '[1-9][0-9]{0,2}(\.[0-9]{1,3}){3}') ; do
-	  ntpip=${network}
-	  break
+  for network in $(${data_dir}/bin/mlbox -timeout=5 -dns="-qtype=A -domain=asia.pool.ntp.org" | grep -v 'timeout' | grep -E '[1-9][0-9]{0,2}(\.[0-9]{1,3}){3}'); do
+    ntpip=${network}
+    break
   done
 
-	if [ -n "${ntpip}" ] ; then
-		logs succes "done"
+  if [ -n "${ntpip}" ]; then
+    logs success "done"
 
-  	logs testing "http="
-  	httpIP=$(${data_dir}/bin/mlbox -timeout=5 -http="http://182.254.116.116/d?dn=reddit.com&clientip=1" 2>&1 | grep -Ev 'timeout|httpGetResponse' | grep -E '[1-9][0-9]{0,2}(\.[0-9]{1,3}){3}')
-  	if [ -n "${httpIP}" ] ; then
-  		httpIP="${httpIP#*\|}"
-  		logs succes "done"
-  	else
-  		logs failed "failed"
-  	fi
-  
-  	logs testing "https="
-		httpsResp=$(${data_dir}/bin/mlbox -timeout=5 -http="https://api.infoip.io" 2>&1 | grep -Ev 'timeout|httpGetResponse' | grep -E '[1-9][0-9]{0,2}(\.[0-9]{1,3}){3}')
-		[ -n "${httpsResp}" ] && logs succes "done" || logs failed "failed"
-  
-  	logs testing "udp="
-  	currentTime=$(${data_dir}/bin/mlbox -timeout=7 -ntp="${ntpip}" | grep -v 'timeout')
-  	echo "${currentTime}" | grep -qi 'LI:' && \
-  		logs succes "done" || logs failed "failed"
+    logs testing "http="
+    httpIP=$(${data_dir}/bin/mlbox -timeout=5 -http="http://182.254.116.116/d?dn=reddit.com&clientip=1" 2>&1 | grep -Ev 'timeout|httpGetResponse' | grep -E '[1-9][0-9]{0,2}(\.[0-9]{1,3}){3}')
+    if [ -n "${httpIP}" ]; then
+      httpIP="${httpIP#*\|}"
+      logs success "done"
+    else
+      logs failed "failed"
+    fi
 
+    logs testing "https="
+    httpsResp=$(${data_dir}/bin/mlbox -timeout=5 -http="https://api.infoip.io" 2>&1 | grep -Ev 'timeout|httpGetResponse' | grep -E '[1-9][0-9]{0,2}(\.[0-9]{1,3}){3}')
+    [ -n "${httpsResp}" ] && logs success "done" || logs failed "failed"
+
+    logs testing "udp="
+    currentTime=$(${data_dir}/bin/mlbox -timeout=7 -ntp="${ntpip}" | grep -v 'timeout')
+    echo "${currentTime}" | grep -qi 'LI:' && \
+      logs success "done" || logs failed "failed"
   else
-  	logs failed "failed"
-	fi
+    logs failed "failed"
+  fi
 
-	[ -t 1 ] && echo "\033[1;31m""\033[0m" || echo "" | tee -a ${logs_file} >> /dev/null 2>&1
+  [ -t 1 ] && echo -e "\033[1;31m\033[0m" || echo "" | tee -a ${logs_file} >> /dev/null 2>&1
 }
 
+# Memeriksa koneksi internet dengan mlbox
 network_check() {
-  if [ -f ${data_dir}/bin/mlbox ] ; then
-  	logs info "check internet connection... "
-		httpsResp=$(${data_dir}/bin/mlbox -timeout=5 -http="https://api.infoip.io" 2>&1 | grep -Ev 'timeout|httpGetResponse' | grep -E '[1-9][0-9]{0,2}(\.[0-9]{1,3}){3}')
-		if [ -n "${httpsResp}" ] ; then
-			logs succes "done"
-		else
-		  logs failed "failed"
-		  flags=false
-	  fi
+  if [ -f "${data_dir}/bin/mlbox" ]; then
+    logs info "Checking internet connection... "
+    httpsResp=$(${data_dir}/bin/mlbox -timeout=5 -http="https://api.infoip.io" 2>&1 | grep -Ev 'timeout|httpGetResponse' | grep -E '[1-9][0-9]{0,2}(\.[0-9]{1,3}){3}')
+    if [ -n "${httpsResp}" ]; then
+      logs success "done"
+    else
+      logs failed "failed"
+      flags=false
+    fi
   fi
-	[ -t 1 ] && echo "\033[1;31m""\033[0m" || echo "" | tee -a ${logs_file} >> /dev/null 2>&1
+  if [ -t 1 ]; then
+    echo "\033[1;31m""\033[0m"
+  else
+    echo "" | tee -a ${logs_file} >> /dev/null 2>&1
+  fi
   [ "${flags}" != "false" ] || exit 1
 }
 
+# Memeriksa apakah suatu binary berjalan dengan mengecek file pid dan cmdline
 probe_bin_alive() {
-  [ -f ${pid_file} ] && cmd_file="/proc/$(pidof ${bin_name})/cmdline" || return 1
-  [ -f ${cmd_file} ] && grep -q ${bin_name} ${cmd_file} && return 0 || return 1
+  if [ -f "${pid_file}" ]; then
+    cmd_file="/proc/$(pidof "${bin_name}")/cmdline"
+    if [ -f "${cmd_file}" ] && grep -q "${bin_name}" "${cmd_file}"; then
+      return 0 # binary is alive
+    else
+      return 1 # binary is not alive
+    fi
+  else
+    return 1 # pid file not found, binary is not alive
+  fi
 }
 
+# Restart binary, setelah dihentikan dan dijalankan kembali
 restart_box() {
   ${scripts_dir}/box.service stop
   sleep 0.5
   ${scripts_dir}/box.service start
+
   if probe_bin_alive ; then
     ${scripts_dir}/box.iptables renew
-    log debug "$(date) ${bin_name} restart"
+    log debug "$(date) ${bin_name} restarted successfully."
   else
-    log error "${bin_name} failed to restart."
+    log error "Failed to restart ${bin_name}."
   fi
 }
 
+# Set DNS secara manual, mengubah net.ipv4.ip_forward dan net.ipv6.conf.all.forwarding menjadi 1
 keep_dns() {
   local_dns1=$(getprop net.dns1)
   local_dns2=$(getprop net.dns2)
-  if [ "${local_dns1}" != "${static_dns1}" ] ; then
-    # for count in $(seq 1 $(getprop | grep dns | wc -l)); do
-    setprop net.dns1 ${static_dns1}
-    setprop net.dns2 ${static_dns2}
-    # done
+  if [ "${local_dns1}" != "${static_dns1}" ] || [ "${local_dns2}" != "${static_dns2}" ] ; then
+    setprop net.dns1 "${static_dns1}"
+    setprop net.dns2 "${static_dns2}"
   fi
-  [ "$(sysctl net.ipv4.ip_forward)" != "1" ] && sysctl -w net.ipv4.ip_forward=1  
-  [ "$(sysctl net.ipv6.conf.all.forwarding)" != "1" ] && sysctl -w net.ipv6.conf.all.forwarding=1
-
+  if [ "$(sysctl net.ipv4.ip_forward)" != "1" ] ; then
+    sysctl -w net.ipv4.ip_forward=1 > /dev/null
+  fi
+  if [ "$(sysctl net.ipv6.conf.all.forwarding)" != "1" ] ; then
+    sysctl -w net.ipv6.conf.all.forwarding=1 > /dev/null
+  fi
   unset local_dns1
   unset local_dns2
 }
 
+# Memperbarui file dari URL
 update_file() {
-  file="$1"
-  file_bak="${file}.bak"
-  update_url="$2"
-  [ -f ${file} ] \
-  && mv -f ${file} ${file_bak}
-  request="wget"
-  request+=" --no-check-certificate"
-  request+=" --user-agent ${user_agent}"
-  request+=" -O ${file}"
-  request+=" ${update_url}"
-  echo ${request}
-  ${request} 2>&1
-  sleep 0.5
-  if [ -f "${file}" ] ; then
-    return 0 
-  else
-    [ -f "${file_bak}" ] && mv ${file_bak} ${file}
+  local file="$1"
+  local update_url="$2"
+  local file_bak="${file}.bak"
+  
+  if [ -f "${file}" ]; then
+    mv "${file}" "${file_bak}" || return 1
   fi
+  
+  local request="wget"
+  local request+=" --no-check-certificate"
+  local request+=" --user-agent ${user_agent}"
+  local request+=" -O ${file}"
+  local request+=" ${update_url}"
+
+  echo ${request}
+  ${request} >&2 || {
+    if [ -f "${file_bak}" ]; then
+      mv "${file_bak}" "${file}" || true
+    fi
+    return 1
+  }
+  
+  return 0
 }
 
+# Memeriksa dan memperbarui geoip dan geosite
 update_subgeo() {
   log info "daily updates"
   network_check
@@ -154,25 +189,22 @@ update_subgeo() {
     ;;
   esac
 
-  if [ "${auto_updategeox}" = "true" ] ; then
-    if log debug "download ${geoip_url}" && update_file ${geoip_file} ${geoip_url} && log debug "download ${geosite_url}" && update_file ${geosite_file} ${geosite_url} ; then
-      log debug "Update geo $(date +"%Y-%m-%d %I.%M %p")"
-      flag=false
-    fi
+  if [ "${auto_updategeox}" = "true" ] && log debug "Downloading ${geoip_url}" && update_file "${geoip_file}" "${geoip_url}" && log debug "Downloading ${geosite_url}" && update_file "${geosite_file}" "${geosite_url}"; then
+    log debug "Update geo $(date +"%Y-%m-%d %I.%M %p")"
+    flag=false
   fi
-  if [ "${bin_name}" = "clash" ] ; then
-    if [ "${auto_updatesubcript}" = "true" ] ; then
-      log debug "download ${clash_config}"
-      if update_file ${clash_config} ${subcript_url} ; then
-        flag=true
-      fi
-    fi
+  
+  if [ "${bin_name}" = "clash" ] && [ "${auto_update_subscription}" = "true" ] && update_file "${clash_config}" "${subscription_url}"; then
+    flag=true
+    log debug "Downloading ${clash_config}"
   fi
-  if [ -f "${pid_file}" ] && [ "${flag}" = "true" ] ; then
+  
+  if [ -f "${pid_file}" ] && [ "${flag}" = "true" ]; then
     restart_box
   fi
 }
 
+# Memeriksa port detected Bin
 port_detection() {
   match_count=0
   if (ss -h > /dev/null 2>&1) ; then
@@ -190,9 +222,12 @@ port_detection() {
 	[ -t 1 ] && echo "\033[1;31m""\033[0m" || echo "" | tee -a ${logs_file} >> /dev/null 2>&1
 }
 
+# kill bin
 kill_alive() {
-  for list in ${bin_list[*]} ; do
-    kill -9 $(pidof ${list}) || killall -9 ${list}
+  for list in "${bin_list[@]}" ; do
+    if pgrep "$list" >/dev/null ; then
+      kill -9 $(pgrep "$list") >/dev/null 2>&1 || killall -9 "$list" >/dev/null 2>&1
+    fi
   done
 }
 
@@ -212,23 +247,28 @@ update_kernel() {
   file_kernel="${bin_name}-${arch}"
   case "${bin_name}" in
     sing-box)
-      sing_box_version_temp=$(wget --no-check-certificate -qO- "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-      sing_box_version=${sing_box_version_temp:1}
-      download_link="https://github.com/SagerNet/sing-box/releases/download/${sing_box_version_temp}/sing-box-${sing_box_version}-${platform}-${arch}.tar.gz"
+      # url_api="https://api.github.com/repos/SagerNet/sing-box/releases/latest"
+      # url_down="https://github.com/SagerNet/sing-box/releases/download"
+      # sing_box_version_temp=$(wget --no-check-certificate -qO- "${url_download}" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+      # sing_box_version=${sing_box_version_temp:1}
+
+      url_api="https://api.github.com/repos/SagerNet/sing-box/releases/latest"
+      url_down="https://github.com/SagerNet/sing-box/releases"
+      sing_box_version_temp=$(wget --no-check-certificate -qO- "${url_api}" | grep '"tag_name":' | cut -d'"' -f4)
+      sing_box_version=${sing_box_version_temp#v}
+
+      download_link="${url_down}/download/${sing_box_version}/sing-box-${sing_box_version}-${platform}-${arch}.tar.gz"
       log debug "download ${download_link}"
       update_file "${data_dir}/${file_kernel}.tar.gz" "${download_link}"
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
       ;;
     clash)
       if [ "${meta}" = "true" ] ; then
-        tag="Prerelease-Alpha"
-        tag_name="alpha-[0-9,a-z]+"
         download_link="https://github.com/taamarin/Clash.Meta/releases"
-        latest_version=$(wget --no-check-certificate -qO- "${download_link}/expanded_assets/${tag}" | grep -oE "${tag_name}" | head -1)
-        filename="clash.meta"
-        filename+="-${platform}"
-        filename+="-${arch}"
-        # filename+="-cgo"
+        local tag=$(wget --no-check-certificate -qO- ${download_link} | grep -oE 'tag\/([^"]+)' | cut -d '/' -f 2 | head -1)
+        latest_version=$(wget --no-check-certificate -qO- "${download_link}/expanded_assets/${tag}" | grep -oE "alpha-[0-9,a-z]+" | head -1)
+        filename="clash.meta-${platform}-${arch}"
+        filename+="-cgo"
         filename+="-${latest_version}"
         log debug "download ${download_link}/download/${tag}/${filename}.gz"
         update_file "${data_dir}/${file_kernel}.gz" "${download_link}/download/${tag}/${filename}.gz"
@@ -277,84 +317,161 @@ update_kernel() {
 
   case "${bin_name}" in
     clash)
-      [ -f /system/bin/gunzip ] \
-      && extra="/system/bin/gunzip" || extra="${busybox_path} gunzip"
-      if (${extra} "${data_dir}/${file_kernel}.gz" >&2) ; then
-        mv -f "${data_dir}/${file_kernel}" "${bin_kernel}/${bin_name}" \
-        && flag="true" || log error "failed to move the kernel"
-        [ -f "${pid_file}" ] && [ "${flag}" = "true" ] \
-        && restart_box || log debug "${bin_name} does not restart"
+      if [ -f /system/bin/gunzip ]; then
+        extra="/system/bin/gunzip"
       else
-        log warn "failed extra file ${data_dir}/${file_kernel}.gz"
+        extra="${busybox_path} gunzip"
+      fi
+      
+      if ${extra} "${data_dir}/${file_kernel}.gz" >&2; then
+        if mv -f "${data_dir}/${file_kernel}" "${bin_kernel}/${bin_name}"; then
+          flag="true"
+        else
+          log error "failed to move the kernel"
+        fi
+      else
+        log warn "failed to extract ${data_dir}/${file_kernel}.gz"
+      fi
+      
+      if [ -f "${pid_file}" ] && [ "${flag}" = "true" ]; then
+        restart_box
+      else
+        log debug "${bin_name} does not need to be restarted"
       fi
     ;;
     sing-box)
-      [ -f /system/bin/tar ] \
-      && extra="/system/bin/tar" || extra="${busybox_path} tar"
-      if (${extra} -xf "${data_dir}/${file_kernel}.tar.gz" -C ${data_dir}/bin >&2) ; then
-        mv "${data_dir}/bin/sing-box-${sing_box_version}-${platform}-${arch}/sing-box" "${bin_kernel}/${bin_name}"
-        rm -r "${data_dir}/bin/sing-box-${sing_box_version}-${platform}-${arch}" \
-        && flag="true" || log error "failed to move the kernel"
-        [ -f "${pid_file}" ] && [ "${flag}" = "true" ] \
-        && restart_box || log debug "${bin_name} does not restart"
+      if [ -f /system/bin/tar ]; then
+        extra="/system/bin/tar"
       else
-        log warn "failed extra file ${data_dir}/${file_kernel}.gz"
+        extra="${busybox_path} tar"
+      fi
+      
+      if ${extra} -xf "${data_dir}/${file_kernel}.tar.gz" -C "${data_dir}/bin" >&2; then
+        if mv "${data_dir}/bin/sing-box-${sing_box_version}-${platform}-${arch}/sing-box" "${bin_kernel}/${bin_name}"; then
+          flag="true"
+          rm -r "${data_dir}/bin/sing-box-${sing_box_version}-${platform}-${arch}"
+        else
+          log error "failed to move the kernel"
+        fi
+      else
+        log warn "failed to extract ${data_dir}/${file_kernel}.tar.gz"
+      fi
+      
+      if [ -f "${pid_file}" ] && [ "${flag}" = "true" ]; then
+        restart_box
+      else
+        log debug "${bin_name} does not need to be restarted"
       fi
     ;;
     v2fly)
-      [ -f /system/bin/unzip ] \
-      && extra="/system/bin/unzip" || extra="${busybox_path} unzip"
-      if (${extra} -o "${data_dir}/${file_kernel}.zip" "v2ray" -d ${bin_kernel} >&2) ; then
-        mv "${bin_kernel}/v2ray" "${bin_kernel}/v2fly" \
-        && flag="true" || log error "failed to move the kernel"
-        [ -f "${pid_file}" ] && [ "${flag}" = "true" ] \
-        && restart_box || log debug "${bin_name} does not restart"
+      if [ -f /system/bin/unzip ]; then
+        extra="/system/bin/unzip"
       else
-        log warn "failed extra file ${data_dir}/${file_kernel}.gz"
+        extra="${busybox_path} unzip"
+      fi
+      
+      if ${extra} -o "${data_dir}/${file_kernel}.zip" "v2ray" -d "${bin_kernel}" >&2; then
+        if mv "${bin_kernel}/v2ray" "${bin_kernel}/v2fly"; then
+          flag="true"
+        else
+          log error "failed to move the kernel"
+        fi
+      else
+        log warn "failed to extract ${data_dir}/${file_kernel}.zip"
+      fi
+      
+      if [ -f "${pid_file}" ] && [ "${flag}" = "true" ]; then
+        restart_box
+      else
+        log debug "${bin_name} does not need to be restarted"
       fi
     ;;
-      xray)
-      [ -f /system/bin/unzip ] \
-      && extra="/system/bin/unzip" || extra="${busybox_path} unzip"
-      if (${extra} -o "${data_dir}/${file_kernel}.zip" "xray" -d ${bin_kernel} >&2) ; then
-        mv "${bin_kernel}/xray" "${bin_kernel}/xray" \
-        && flag="true" || log error "failed to move the kernel"
-        [ -f "${pid_file}" ] && [ "${flag}" = "true" ] \
-        && restart_box || log debug "${bin_name} does not restart"
+    xray)
+      if [ -f /system/bin/unzip ]; then
+        extra="/system/bin/unzip"
       else
-        log warn "failed extra file ${data_dir}/${file_kernel}.gz"
+        extra="${busybox_path} unzip"
+      fi
+      
+      if ${extra} -o "${data_dir}/${file_kernel}.zip" "xray" -d "${bin_kernel}" >&2; then
+        if mv "${bin_kernel}/xray" "${bin_kernel}/xray"; then
+          flag="true"
+        else
+          log error "failed to move the kernel"
+        fi
+      else
+        log warn "failed to extract ${data_dir}/${file_kernel}.zip"
+      fi
+      
+      if [ -f "${pid_file}" ] && [ "${flag}" = "true" ]; then
+        restart_box
+      else
+        log debug "${bin_name} does not need to be restarted"
       fi
     ;;
     *)
       log error "kernel error." && exit 1
     ;;
   esac
+
+  chown ${box_user_group} ${bin_path}
+  chmod 6755 ${bin_path}
 }
 
+# Function to limit cgroup memory
 cgroup_limit() {
-  [ "${cgroup_memory_limit}" = "" ] && return
-  [ "${cgroup_memory_path}" = "" ] \
-  && cgroup_memory_path=$(mount | grep cgroup | awk '/memory/{print $3}' | head -1)
+  # Check if cgroup_memory_limit is set
+  if [ -z "${cgroup_memory_limit}" ]; then
+    log warn "cgroup_memory_limit is not set"
+    return 1
+  fi
 
+  # Check if cgroup_memory_path is set and exists
+  if [ -z "${cgroup_memory_path}" ]; then
+    local cgroup_memory_path=$(mount | grep cgroup | awk '/memory/{print $3}' | head -1)
+    if [ -z "${cgroup_memory_path}" ]; then
+      log warn "cgroup_memory_path is not set and cannot be found"
+      return 1
+    fi
+  elif [ ! -d "${cgroup_memory_path}" ]; then
+    log warn "${cgroup_memory_path} does not exist"
+    return 1
+  fi
+
+  # Check if pid_file is set and exists
+  if [ -z "${pid_file}" ]; then
+    log warn "pid_file is not set"
+    return 1
+  elif [ ! -f "${pid_file}" ]; then
+    log warn "${pid_file} does not exist"
+    return 1
+  fi
+
+  # Create cgroup directory and move process to cgroup
+  local bin_name=$(basename "$0")
   mkdir -p "${cgroup_memory_path}/${bin_name}"
-  echo $(cat ${pid_file}) > "${cgroup_memory_path}/${bin_name}/cgroup.procs" \
-  && log info "${cgroup_memory_path}/${bin_name}/cgroup.procs"  
+  local pid=$(cat "${pid_file}")
+  echo "${pid}" > "${cgroup_memory_path}/${bin_name}/cgroup.procs" \
+    && log info "Moved process ${pid} to ${cgroup_memory_path}/${bin_name}/cgroup.procs"
+
+  # Set memory limit for cgroup
   echo "${cgroup_memory_limit}" > "${cgroup_memory_path}/${bin_name}/memory.limit_in_bytes" \
-  && log info "${cgroup_memory_path}/${bin_name}/memory.limit_in_bytes"
+    && log info "Set memory limit to ${cgroup_memory_limit} for ${cgroup_memory_path}/${bin_name}/memory.limit_in_bytes"
+
+  return 0
 }
 
 update_dashboard() {
   network_check
-  if [ "${bin_name}" = "sing-box" ] || [ "${bin_name}" = "clash" ] ; then
-    file_dasboard="${data_dir}/${bin_name}/dashboard.zip"
-    rm -rf ${data_dir}/${bin_name}/dashboard/dist
-    #url="https://github.com/haishanh/yacd/archive/refs/heads/gh-pages.zip"
+  if [ "${bin_name}" = "sing-box" ] || [ "${bin_name}" = "clash" ]; then
+    file_dashboard="${data_dir}/${bin_name}/dashboard.zip"
+    rm -rf "${data_dir}/${bin_name}/dashboard/dist"
     url="https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip"
     dir_name="Yacd-meta-gh-pages"
-    wget --no-check-certificate "${url}" -O ${file_dasboard} 2>&1
-    unzip -o  "${file_dasboard}" "${dir_name}/*" -d "${data_dir}/${bin_name}/dashboard" >&2
-    mv -f ${data_dir}/${bin_name}/dashboard/"${dir_name}" "${data_dir}/${bin_name}/dashboard/dist"
-    rm -rf ${file_dasboard}
+    wget --no-check-certificate "${url}" -O "${file_dashboard}" 2>&1
+    unzip -o "${file_dashboard}" "${dir_name}/*" -d "${data_dir}/${bin_name}/dashboard" >&2
+    mv -f "${data_dir}/${bin_name}/dashboard/${dir_name}" "${data_dir}/${bin_name}/dashboard/dist"
+    rm -f "${file_dashboard}"
   else
     log debug "${bin_name} does not support dashboards"
   fi
@@ -372,35 +489,18 @@ run_base64() {
   fi
 }
 
-cp_bin () {
-  ( cp /data/adb/box/bin/* /data/adb/modules/box_for_magisk/system/bin ) && log debug "file copy done"
+# copy bin ke system/bin
+cp_bin() {
+  if cp /data/adb/box/bin/* /data/adb/modules/box_for_magisk/system/bin; then
+    log debug "File copy completed successfully."
+  else
+    log error "File copy failed."
+  fi
 }
 
 case "$1" in
-  subgeo)
-    update_subgeo
-    find ${data_dir}/${bin_name} -type f -name "*.db.bak" | xargs rm -f
-    find ${data_dir}/${bin_name} -type f -name "*.dat.bak" | xargs rm -f
-    ;;
   testing)
     testing
-    ;;
-  port)
-    port_detection
-    ;;
-  cgroup)
-    cgroup_limit
-    ;;
-  upcore)
-    update_kernel
-    chown ${box_user_group} ${bin_path}
-    chmod 6755 ${bin_path}
-    ;;
-  upyacd)
-    update_dashboard
-    ;;
-  rbase64)
-    run_base64
     ;;
   keepdns)
     keep_dns
@@ -408,7 +508,28 @@ case "$1" in
   connect)
     network_check
     ;;
+  rbase64)
+    run_base64
+    ;;
+  upyacd)
+    update_dashboard
+    ;;
+  upcore)
+    update_kernel
+    ;;
+  cgroup)
+    cgroup_limit
+    ;;
+  port)
+    port_detection
+    ;;
+  subgeo)
+    update_subgeo
+    find "${data_dir}/${bin_name}" -type f -name "*.db.bak" -delete
+    find "${data_dir}/${bin_name}" -type f -name "*.dat.bak" -delete
+    ;;
   *)
-    echo "$0: usage: $0 {connect|rbase64|upyacd|upcore|cgroup|port|subgeo}"
+    echo "$0: usage: $0 {testing|keepdns|connect|rbase64|upyacd|upcore|cgroup|port|subgeo}"
+    exit 1
     ;;
 esac
