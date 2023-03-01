@@ -247,17 +247,12 @@ update_kernel() {
   file_kernel="${bin_name}-${arch}"
   case "${bin_name}" in
     sing-box)
-      # url_api="https://api.github.com/repos/SagerNet/sing-box/releases/latest"
-      # url_down="https://github.com/SagerNet/sing-box/releases/download"
-      # sing_box_version_temp=$(wget --no-check-certificate -qO- "${url_download}" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-      # sing_box_version=${sing_box_version_temp:1}
-
       url_api="https://api.github.com/repos/SagerNet/sing-box/releases/latest"
       url_down="https://github.com/SagerNet/sing-box/releases"
       sing_box_version_temp=$(wget --no-check-certificate -qO- "${url_api}" | grep '"tag_name":' | cut -d'"' -f4)
       sing_box_version=${sing_box_version_temp#v}
 
-      download_link="${url_down}/download/${sing_box_version}/sing-box-${sing_box_version}-${platform}-${arch}.tar.gz"
+      download_link="${url_down}/download/${sing_box_version_temp}/sing-box-${sing_box_version}-${platform}-${arch}.tar.gz"
       log debug "download ${download_link}"
       update_file "${data_dir}/${file_kernel}.tar.gz" "${download_link}"
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
@@ -287,26 +282,26 @@ update_kernel() {
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
       ;;
     xray)
+      latest_version=$(wget --no-check-certificate -qO- https://api.github.com/repos/XTLS/Xray-core/releases | grep "tag_name" | grep -o "v[0-9.]*" | head -1)
+      if [ $(uname -m) != "aarch64" ]; then
+          download_file="Xray-linux-arm32-v7a.zip"
+      else
+          download_file="Xray-android-arm64-v8a.zip"
+      fi
       download_link="https://github.com/XTLS/Xray-core/releases"
-      github_api="https://api.github.com/repos/XTLS/Xray-core/releases"
-      latest_version=$(wget --no-check-certificate -qO- ${github_api} | grep "tag_name" | grep -o "v[0-9.]*" | head -1)
-
-      [ $(uname -m) != "aarch64" ] \
-      && download_file="Xray-linux-arm32-v7a.zip" || download_file="Xray-android-arm64-v8a.zip"
-
-      log debug "download ${download_link}/download/${latest_version}/${download_file}"
+      log debug "Downloading ${download_link}/download/${latest_version}/${download_file}"
       update_file "${data_dir}/${file_kernel}.zip" "${download_link}/download/${latest_version}/${download_file}"
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
     ;;
     v2fly)
+      latest_version=$(wget --no-check-certificate -qO- https://api.github.com/repos/v2fly/v2ray-core/releases | grep "tag_name" | grep -o "v[0-9.]*" | head -1)
+      if [ $(uname -m) = "aarch64" ]; then
+          download_file="v2ray-linux-arm64-v8a.zip"
+      else
+          download_file="v2ray-linux-32.zip"
+      fi
       download_link="https://github.com/v2fly/v2ray-core/releases"
-      github_api="https://api.github.com/repos/v2fly/v2ray-core/releases"
-      latest_version=$(wget --no-check-certificate -qO- ${github_api} | grep "tag_name" | grep -o "v[0-9.]*" | head -1)
-
-      [ $(uname -m) != "aarch64" ] \
-      && download_file="v2ray-linux-arm32-v7a.zip" || download_file="v2ray-android-arm64-v8a.zip"
-
-      log debug "download ${download_link}/download/${latest_version}/${download_file}"
+      log debug "Downloading ${download_link}/download/${latest_version}/${download_file}"
       update_file "${data_dir}/${file_kernel}.zip" "${download_link}/download/${latest_version}/${download_file}"
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
       ;;
@@ -413,7 +408,8 @@ update_kernel() {
       log error "kernel error." && exit 1
     ;;
   esac
-
+  
+  find "${data_dir}" -type f -name "${file_kernel}.zip" -delete
   chown ${box_user_group} ${bin_path}
   chmod 6755 ${bin_path}
 }

@@ -4,7 +4,6 @@ scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
 source /data/adb/box/settings.ini
 
-
 delete_logs() {
   # Delete logs for each bin in the list
   log info "Deleting & Backup logs for ${bin_list[*]}"
@@ -299,7 +298,7 @@ bin_usage() {
 display_bin_pid() {
   # Mengecek apakah bin_name sudah didefinisikan
   if [ -z "${bin_name}" ]; then
-    log error "bin_name: ${bin_name} tidak ditentukan"
+    log error "bin_name: ${bin_name} not defined"
     return 1
   fi
   
@@ -428,7 +427,8 @@ case "$1" in
   restart)
     stop_box
     sleep 1
-    start_box && ${scripts_dir}/box.iptables renew
+    start_box
+    ${scripts_dir}/box.iptables renew
     ;;
   usage)
     case "${bin_name}" in
