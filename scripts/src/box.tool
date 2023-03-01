@@ -163,30 +163,26 @@ update_file() {
 update_subgeo() {
   log info "daily updates"
   network_check
+
   case "${bin_name}" in
     clash)
-      if [ "${meta}" = "false" ] ; then
-        geoip_file="${data_dir}/clash/Country.mmdb"
-        geoip_url="https://github.com/Loyalsoldier/geoip/raw/release/Country-only-cn-private.mmdb"
-      else
-        geoip_file="${data_dir}/clash/GeoIP.dat"
-        geoip_url="https://github.com/v2fly/geoip/raw/release/geoip-only-cn-private.dat"
-      fi
+      geoip_file="${data_dir}/clash/$(if [ "${meta}" = "false" ]; then echo "Country"; else echo "GeoIP"; fi).mmdb"
+      geoip_url="https://github.com/$(if [ "${meta}" = "false" ]; then echo "Loyalsoldier/geoip/raw/release/Country-only-cn-private.mmdb"; else echo "v2fly/geoip/raw/release/geoip-only-cn-private.dat"; fi)"
       geosite_file="${data_dir}/clash/GeoSite.dat"
       geosite_url="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-    ;;
+      ;;
     sing-box)
       geoip_file="${data_dir}/sing-box/geoip.db"
       geoip_url="https://github.com/SagerNet/sing-geoip/releases/download/20221012/geoip-cn.db"
       geosite_file="${data_dir}/sing-box/geosite.db"
       geosite_url="https://github.com/CHIZI-0618/v2ray-rules-dat/raw/release/geosite.db"
-    ;;
+      ;;
     *)
       geoip_file="${data_dir}/${bin_name}/geoip.dat"
       geoip_url="https://github.com/v2fly/geoip/raw/release/geoip-only-cn-private.dat"
       geosite_file="${data_dir}/${bin_name}/geosite.dat"
       geosite_url="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-    ;;
+      ;;
   esac
 
   if [ "${auto_update_geox}" = "true" ] && log debug "Downloading ${geoip_url}" && update_file "${geoip_file}" "${geoip_url}" && log debug "Downloading ${geosite_url}" && update_file "${geosite_file}" "${geosite_url}"; then
@@ -204,22 +200,31 @@ update_subgeo() {
   fi
 }
 
-# Memeriksa port detected Bin
+# Function for detecting ports used by a process
 port_detection() {
-  match_count=0
-  if (ss -h > /dev/null 2>&1) ; then
-    port=$(ss -antup | grep "${bin_name}" | awk '$7~/'pid=$(pidof ${bin_name})*'/{print $5}' | awk -F ':' '{print $2}' | sort -u)
+  # Use 'command' function to check if 'ss' is available
+  if command -v ss > /dev/null ; then
+    # Use 'awk' with a regular expression to match the process ID
+    ports=$(ss -antup | awk -v pid="$(pidof "${bin_name}")" '$7 ~ pid {print $5}' | awk -F ':' '{print $2}' | sort -u)
   else
-    log warn "skip port detected"
-    exit 0
+    # Log a warning message if 'ss' is not available
+    log debug "Warning: 'ss' command not found, skipping port detection." >&2
+    return
   fi
-  logs debug "${bin_name} port detected: "
-  for sub_port in ${port[*]} ; do
-    sleep 0.5
-    logs port "${sub_port}"
-  done
 
-	[ -t 1 ] && echo "\033[1;31m""\033[0m" || echo "" | tee -a ${logs_file} >> /dev/null 2>&1
+  # Log the detected ports
+  logs debug "${bin_name} port detected: "
+  while read -r port ; do
+    sleep 0.5
+    logs port "${port}"
+  done <<< "${ports}"
+
+  # Add a newline to the output if running in a terminal
+  if [ -t 1 ] ; then
+    echo -e "\033[1;31m""\033[0m"
+  else
+    echo "" >> "${logs_file}" 2>&1
+  fi
 }
 
 # kill bin
@@ -233,17 +238,15 @@ kill_alive() {
 
 update_kernel() {
   # su -c /data/adb/box/scripts/box.tool upcore
-  meta=true
-  # for download clash premium / dev
-  dev=true
   network_check
-  if [ $(uname -m) = "aarch64" ] ; then
-    arch="arm64"
-    platform="android"
-  else
-    arch="armv7"
-    platform="linux"
-  fi
+  case $(uname -m) in
+    "aarch64") arch="arm64"; platform="android" ;;
+    "armv7l") arch="armv7"; platform="linux" ;;
+    "i686") arch="386"; platform="linux" ;;
+    "x86_64") arch="amd64"; platform="linux" ;;
+    *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+  esac
+# Lakukan hal lainnya di bawah ini
   file_kernel="${bin_name}-${arch}"
   case "${bin_name}" in
     sing-box)
@@ -258,20 +261,33 @@ update_kernel() {
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
       ;;
     clash)
+      # set meta and dev flags
+      meta=true
+      dev=true
+      
+      # if meta flag is true, download clash.meta
       if [ "${meta}" = "true" ] ; then
+        # set download link and get the latest version
         download_link="https://github.com/taamarin/Clash.Meta/releases"
-        local tag=$(wget --no-check-certificate -qO- ${download_link} | grep -oE 'tag\/([^"]+)' | cut -d '/' -f 2 | head -1)
+        tag=$(wget --no-check-certificate -qO- ${download_link} | grep -oE 'tag\/([^"]+)' | cut -d '/' -f 2 | head -1)
         latest_version=$(wget --no-check-certificate -qO- "${download_link}/expanded_assets/${tag}" | grep -oE "alpha-[0-9,a-z]+" | head -1)
+        
+        # set the filename based on platform and architecture
         filename="clash.meta-${platform}-${arch}"
-        filename+="-cgo"
+        [ $(uname -m) != "aarch64" ] || filename+="-cgo"
         filename+="-${latest_version}"
+        
+        # download and update the file
         log debug "download ${download_link}/download/${tag}/${filename}.gz"
         update_file "${data_dir}/${file_kernel}.gz" "${download_link}/download/${tag}/${filename}.gz"
+      # if meta flag is false, download clash premium/dev
       else
+        # if dev flag is true, download latest dev version
         if [ "${dev}" != "false" ] ; then
           download_link="https://release.dreamacro.workers.dev/latest"
           log debug "download ${download_link}/clash-linux-${arch}-latest.gz"
           update_file "${data_dir}/${file_kernel}.gz" "${download_link}/clash-linux-${arch}-latest.gz"
+        # if dev flag is false, download latest premium version
         else
           download_link="https://github.com/Dreamacro/clash/releases"
           filename=$(wget --no-check-certificate -qO- "${download_link}/expanded_assets/premium" | grep -oE "clash-linux-${arch}-[0-9]+.[0-9]+.[0-9]+" | head -1)
@@ -279,30 +295,42 @@ update_kernel() {
           update_file "${data_dir}/${file_kernel}.gz" "${download_link}/download/premium/${filename}.gz"
         fi
       fi
+      
+      # if the update_file command was successful, kill the alive process
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
       ;;
     xray)
+      # set download link and get the latest version
       latest_version=$(wget --no-check-certificate -qO- https://api.github.com/repos/XTLS/Xray-core/releases | grep "tag_name" | grep -o "v[0-9.]*" | head -1)
-      if [ $(uname -m) != "aarch64" ]; then
-          download_file="Xray-linux-arm32-v7a.zip"
-      else
-          download_file="Xray-android-arm64-v8a.zip"
-      fi
+      case $(uname -m) in
+        "i386") download_file="Xray-linux-32.zip" ;;
+        "x86_64") download_file="Xray-linux-64.zip" ;;
+        "armv7l") download_file="Xray-linux-arm32-v7a.zip" ;;
+        "aarch64") download_file="Xray-android-arm64-v8a.zip" ;;
+        *) log error "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+      esac
+      # Lakukan hal lainnya di bawah ini
       download_link="https://github.com/XTLS/Xray-core/releases"
       log debug "Downloading ${download_link}/download/${latest_version}/${download_file}"
       update_file "${data_dir}/${file_kernel}.zip" "${download_link}/download/${latest_version}/${download_file}"
+      # if the update_file command was successful, kill the alive process
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
     ;;
     v2fly)
+      # set download link and get the latest version
       latest_version=$(wget --no-check-certificate -qO- https://api.github.com/repos/v2fly/v2ray-core/releases | grep "tag_name" | grep -o "v[0-9.]*" | head -1)
-      if [ $(uname -m) = "aarch64" ]; then
-          download_file="v2ray-linux-arm64-v8a.zip"
-      else
-          download_file="v2ray-linux-32.zip"
-      fi
+      case $(uname -m) in
+        "i386") download_file="v2ray-linux-32.zip" ;;
+        "x86_64") download_file="v2ray-linux-64.zip" ;;
+        "armv7l") download_file="v2ray-linux-arm32-v7a.zip" ;;
+        "aarch64") download_file="v2ray-android-arm64-v8a.zip" ;;
+        *) log error "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+      esac
+      # Lakukan hal lainnya di bawah ini
       download_link="https://github.com/v2fly/v2ray-core/releases"
       log debug "Downloading ${download_link}/download/${latest_version}/${download_file}"
       update_file "${data_dir}/${file_kernel}.zip" "${download_link}/download/${latest_version}/${download_file}"
+      # if the update_file command was successful, kill the alive process
       [ "$?" = "0" ] && kill_alive > /dev/null 2>&1
       ;;
     *)
@@ -312,20 +340,16 @@ update_kernel() {
 
   case "${bin_name}" in
     clash)
-      if [ -f /system/bin/gunzip ]; then
-        extra="/system/bin/gunzip"
+      if command -v gunzip >/dev/null 2>&1; then
+        gunzip_command="gunzip"
       else
-        extra="${busybox_path} gunzip"
+        gunzip_command="${busybox_path} gunzip"
       fi
       
-      if ${extra} "${data_dir}/${file_kernel}.gz" >&2; then
-        if mv -f "${data_dir}/${file_kernel}" "${bin_kernel}/${bin_name}"; then
-          flag="true"
-        else
-          log error "failed to move the kernel"
-        fi
+      if ${gunzip_command} "${data_dir}/${file_kernel}.gz" >&2 && mv "${data_dir}/${file_kernel}" "${bin_kernel}/${bin_name}"; then
+        flag="true"
       else
-        log warn "failed to extract ${data_dir}/${file_kernel}.gz"
+        log error "Failed to extract or move the kernel"
       fi
       
       if [ -f "${pid_file}" ] && [ "${flag}" = "true" ]; then
@@ -336,20 +360,15 @@ update_kernel() {
     ;;
     sing-box)
       if [ -f /system/bin/tar ]; then
-        extra="/system/bin/tar"
+        tar_command="/system/bin/tar"
       else
-        extra="${busybox_path} tar"
+        tar_command="${busybox_path} tar"
       fi
       
-      if ${extra} -xf "${data_dir}/${file_kernel}.tar.gz" -C "${data_dir}/bin" >&2; then
-        if mv "${data_dir}/bin/sing-box-${sing_box_version}-${platform}-${arch}/sing-box" "${bin_kernel}/${bin_name}"; then
-          flag="true"
-          rm -r "${data_dir}/bin/sing-box-${sing_box_version}-${platform}-${arch}"
-        else
-          log error "failed to move the kernel"
-        fi
+      if ${tar_command} -xf "${data_dir}/${file_kernel}.tar.gz" -C "${data_dir}/bin" >&2 && mv "${data_dir}/bin/sing-box-${sing_box_version}-${platform}-${arch}/sing-box" "${bin_kernel}/${bin_name}" && rm -r "${data_dir}/bin/sing-box-${sing_box_version}-${platform}-${arch}"; then
+        flag="true"
       else
-        log warn "failed to extract ${data_dir}/${file_kernel}.tar.gz"
+        log warn "failed to extract ${data_dir}/${file_kernel}.tar.gz" && flag="false"
       fi
       
       if [ -f "${pid_file}" ] && [ "${flag}" = "true" ]; then
@@ -360,12 +379,12 @@ update_kernel() {
     ;;
     v2fly)
       if [ -f /system/bin/unzip ]; then
-        extra="/system/bin/unzip"
+        unzip_command="/system/bin/unzip"
       else
-        extra="${busybox_path} unzip"
+        unzip_command="${busybox_path} unzip"
       fi
       
-      if ${extra} -o "${data_dir}/${file_kernel}.zip" "v2ray" -d "${bin_kernel}" >&2; then
+      if ${unzip_command} -o "${data_dir}/${file_kernel}.zip" "v2ray" -d "${bin_kernel}" >&2; then
         if mv "${bin_kernel}/v2ray" "${bin_kernel}/v2fly"; then
           flag="true"
         else
@@ -383,12 +402,12 @@ update_kernel() {
     ;;
     xray)
       if [ -f /system/bin/unzip ]; then
-        extra="/system/bin/unzip"
+        unzip_command="/system/bin/unzip"
       else
-        extra="${busybox_path} unzip"
+        unzip_command="${busybox_path} unzip"
       fi
       
-      if ${extra} -o "${data_dir}/${file_kernel}.zip" "xray" -d "${bin_kernel}" >&2; then
+      if ${unzip_command} -o "${data_dir}/${file_kernel}.zip" "xray" -d "${bin_kernel}" >&2; then
         if mv "${bin_kernel}/xray" "${bin_kernel}/xray"; then
           flag="true"
         else
@@ -409,7 +428,7 @@ update_kernel() {
     ;;
   esac
   
-  find "${data_dir}" -type f -name "${file_kernel}.zip" -delete
+  find "${data_dir}" -type f -name "${file_kernel}.*" -delete
   chown ${box_user_group} ${bin_path}
   chmod 6755 ${bin_path}
 }
@@ -474,56 +493,57 @@ update_dashboard() {
 }
 
 run_base64() {
-  if [ "$(cat ${data_dir}/sing-box/acc.txt 2>&1)" != "" ] ; then
-    log info "$(cat ${data_dir}/sing-box/acc.txt 2>&1)"
-    base64 ${data_dir}/sing-box/acc.txt > ${data_dir}/dashboard/dist/proxy.txt
-    log info "ceks ${data_dir}/dashboard/dist/proxy.txt"
-    log info "done"
+  acc_file="${data_dir}/sing-box/acc.txt"
+  proxy_file="${data_dir}/dashboard/dist/proxy.txt"
+  
+  if [ -s "$acc_file" ]; then
+    log info "$(cat "$acc_file" 2>&1)"
+    base64 "${acc_file}" > "${proxy_file}"
+    log info "Generated ${proxy_file}"
+    log info "Done"
   else
-    log warn "${data_dir}/sing-box/acc.txt is empty"
+    log warn "${acc_file} is empty or does not exist"
     exit 1
   fi
 }
 
 # copy bin ke system/bin
 cp_bin() {
-  if cp /data/adb/box/bin/* /data/adb/modules/box_for_magisk/system/bin; then
+  if cp /data/adb/box/bin/* /data/adb/modules/box_for_magisk/system/bin/; then
     log debug "File copy completed successfully."
   else
-    log error "File copy failed."
+    log debug "File copy failed." >&2
+    exit 1
   fi
 }
 
 reload() {
-  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "sing-box" ]; then
-    case "${bin_name}" in
-      sing-box)
-        if ${bin_path} check -D "${data_dir}/${bin_name}" > "${run_path}/${bin_name}-report.log" 2>&1; then
-          log info "config.json passed"
-        else
-          log error "config.json check failed"
-          cat "${run_path}/${bin_name}-report.log"
-          exit 1
-        fi
-        ;;
-      clash)
-        if ${bin_path} -t -d "${data_dir}/clash" -f "${clash_config}" > "${run_path}/${bin_name}-report.log" 2>&1; then
-          log info "config.yaml passed"
-        else
-          log error "config.yaml check failed"
-          cat "${run_path}/${bin_name}-report.log"
-          exit 1
-        fi
-        ;;
-      *)
-        log error "Unknown binary: ${bin_name}"
+  case "${bin_name}" in
+    sing-box)
+      if ${bin_path} check -D "${data_dir}/${bin_name}" > "${run_path}/${bin_name}-report.log" 2>&1; then
+        log info "config.json passed"
+        log info "Open yacd-meta/configs and click 'Reload Configs'"
+      else
+        log error "config.json check failed"
+        cat "${run_path}/${bin_name}-report.log" >&2
         exit 1
-        ;;
-    esac
-    log info "Open yacd-meta/configs and click 'Reload Configs'"
-  else
-    log error "This script is only for clash or sing-box binaries"
-  fi
+      fi
+      ;;
+    clash)
+      if ${bin_path} -t -d "${data_dir}/clash" -f "${clash_config}" > "${run_path}/${bin_name}-report.log" 2>&1; then
+        log info "config.yaml passed"
+        log info "Open yacd-meta/configs and click 'Reload Configs'"
+      else
+        log error "config.yaml check failed"
+        cat "${run_path}/${bin_name}-report.log" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      log error "Unknown binary: ${bin_name}"
+      exit 1
+      ;;
+  esac
 }
 
 case "$1" in
