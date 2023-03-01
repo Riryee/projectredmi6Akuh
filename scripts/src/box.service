@@ -159,9 +159,11 @@ run_box() {
     sing-box)
       # if [ "${network_mode}" = "mixed" ] || [ "${proxy_mode}" = "tun" ] ; then
         # awk '{gsub(/"auto_detect_interface": false/,"\"auto_detect_interface\": true")}1' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
-        # sleep 0.5
-        # awk '{gsub(/auto_route\": true/, "auto_route\": false"); print}' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
+        # sleep 0.75
+        # awk '{gsub(/auto_route\": false/, "auto_route\": true"); print}' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
       # else
+        # awk '{gsub(/auto_route\": true/, "auto_route\": false"); print}' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
+        # sleep 0.75
         # awk '{gsub(/"auto_detect_interface": true/,"\"auto_detect_interface\": false")}1' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
       # fi
       # sleep 1

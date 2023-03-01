@@ -101,7 +101,7 @@ network_port() {
 
   if [ "${network_mode}" = "mixed" ] || [ "${proxy_mode}" = "tun" ]; then
     /system/bin/ifconfig | grep -q "${tun_device}" && \
-     log info "using tun device: '${tun device}' " || \
+     log info "using tun_device: '${tun_device}' " || \
      log error "tun_device: '${tun_device}' not found"
   fi
 }
@@ -139,8 +139,8 @@ start_redirect() {
     fi
 
     for subnet in "${intranet[@]}"; do
-        ${iptables} -t nat -A BOX_EXTERNAL -d "${subnet}" -m comment --comment "Allow access to intranet subnet "${subnet}" -j RETURN
-        ${iptables} -t nat -A BOX_LOCAL -d "${subnet}" -m comment --comment "Allow access to intranet subnet "${subnet}" -j RETURN
+        ${iptables} -t nat -A BOX_EXTERNAL -d "${subnet}" -m comment --comment "Allow access to intranet subnet ${subnet}" -j RETURN
+        ${iptables} -t nat -A BOX_LOCAL -d "${subnet}" -m comment --comment "Allow access to intranet subnet ${subnet}" -j RETURN
     done
   
     ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i lo -j REDIRECT --to-ports "${redir_port}"
