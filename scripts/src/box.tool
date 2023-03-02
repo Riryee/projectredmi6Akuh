@@ -118,14 +118,14 @@ restart_box() {
 keep_dns() {
   local_dns1=$(getprop net.dns1)
   local_dns2=$(getprop net.dns2)
-  if [ "${local_dns1}" != "${static_dns1}" ] || [ "${local_dns2}" != "${static_dns2}" ] ; then
+  if [ "${local_dns1}" != "${static_dns1}" ] || [ "${local_dns2}" != "${static_dns2}" ]; then
     setprop net.dns1 "${static_dns1}"
     setprop net.dns2 "${static_dns2}"
   fi
-  if [ "$(sysctl net.ipv4.ip_forward)" != "1" ] ; then
+  if [ "$(sysctl net.ipv4.ip_forward)" != "1" ]; then
     sysctl -w net.ipv4.ip_forward=1 > /dev/null
   fi
-  if [ "$(sysctl net.ipv6.conf.all.forwarding)" != "1" ] ; then
+  if [ "$(sysctl net.ipv6.conf.all.forwarding)" != "1" ]; then
     sysctl -w net.ipv6.conf.all.forwarding=1 > /dev/null
   fi
   unset local_dns1
@@ -220,7 +220,7 @@ port_detection() {
   done <<< "${ports}"
 
   # Add a newline to the output if running in a terminal
-  if [ -t 1 ] ; then
+  if [ -t 1 ]; then
     echo -e "\033[1;31m""\033[0m"
   else
     echo "" >> "${logs_file}" 2>&1
@@ -244,7 +244,7 @@ update_kernel() {
     "armv7l") arch="armv7"; platform="linux" ;;
     "i686") arch="386"; platform="linux" ;;
     "x86_64") arch="amd64"; platform="linux" ;;
-    *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+    *) log warn "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
   esac
 # Lakukan hal lainnya di bawah ini
   file_kernel="${bin_name}-${arch}"
@@ -266,7 +266,7 @@ update_kernel() {
       dev=true
       
       # if meta flag is true, download clash.meta
-      if [ "${meta}" = "true" ] ; then
+      if [ "${meta}" = "true" ]; then
         # set download link and get the latest version
         download_link="https://github.com/taamarin/Clash.Meta/releases"
         tag=$(wget --no-check-certificate -qO- ${download_link} | grep -oE 'tag\/([^"]+)' | cut -d '/' -f 2 | head -1)
@@ -283,7 +283,7 @@ update_kernel() {
       # if meta flag is false, download clash premium/dev
       else
         # if dev flag is true, download latest dev version
-        if [ "${dev}" != "false" ] ; then
+        if [ "${dev}" != "false" ]; then
           download_link="https://release.dreamacro.workers.dev/latest"
           log debug "download ${download_link}/clash-linux-${arch}-latest.gz"
           update_file "${data_dir}/${file_kernel}.gz" "${download_link}/clash-linux-${arch}-latest.gz"

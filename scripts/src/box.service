@@ -53,8 +53,8 @@ still_alive() {
 }
 
 check_permission() {
-  if [ "${box_user_group}" = "root:net_admin" ] ; then
-    if [ ! -f ${bin_path} ] ; then
+  if [ "${box_user_group}" = "root:net_admin" ]; then
+    if [ ! -f ${bin_path} ]; then
       log error "Kernel ${bin_name} is missing."
       log error "Please download and place it in the ${bin_path} directory."
       exit 1
@@ -72,13 +72,13 @@ check_permission() {
       box_user_id=$(id -u ${box_user})
       box_group_id=$(id -g ${box_group})
       # Check if box_user and box_group exist
-      if [ ${box_user_id} ] && [ ${box_group_id} ] ; then
+      if [ ${box_user_id} ] && [ ${box_group_id} ]; then
         bin_path=$(which ${bin_name})
         # Set ownership and permission of kernel directory
         chown ${box_user_group} ${bin_path}
         chmod 6755 ${bin_path}
         # Check if user is not root and group is not net_admin
-        if [ "${box_user_id}" != "0" ] || [ "${box_group_id}" != "3005" ] ; then
+        if [ "${box_user_id}" != "0" ] || [ "${box_group_id}" != "3005" ]; then
           # Set capability of kernel directory
           if command -v setcap > /dev/null; then
             setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || \
@@ -157,7 +157,7 @@ run_box() {
   log info "starting ${bin_name} service."
   case "${bin_name}" in
     sing-box)
-      # if [ "${network_mode}" = "mixed" ] || [ "${proxy_mode}" = "tun" ] ; then
+      # if [ "${network_mode}" = "mixed" ] || [ "${proxy_mode}" = "tun" ]; then
         # awk '{gsub(/"auto_detect_interface": false/,"\"auto_detect_interface\": true")}1' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
         # sleep 0.75
         # awk '{gsub(/auto_route\": false/, "auto_route\": true"); print}' "${data_dir}/sing-box/config.json" > "${data_dir}/temp" && mv "${data_dir}/temp" "${data_dir}/sing-box/config.json"
@@ -178,7 +178,7 @@ run_box() {
       ;;
       
     clash)
-      if [ "${clash_tun_status}" != "true" ] ; then
+      if [ "${clash_tun_status}" != "true" ]; then
         awk -v tproxy_port="${tproxy_port}" '/tproxy-port:/ {$2=tproxy_port} {print}' ${clash_config} > ${data_dir}/tmp && mv ${data_dir}/tmp ${clash_config}
         default_tp
       else
@@ -215,7 +215,7 @@ run_box() {
     
     v2fly)
       default_tp
-      if [ ! -f "${data_dir}/${bin_name}"/*.json ] ; then
+      if [ ! -f "${data_dir}/${bin_name}"/*.json ]; then
         log error "file ${data_dir}/v2ray/*.json not found"
         exit 1
       fi
@@ -262,9 +262,9 @@ bin_usage() {
 
   # Get the memory usage of the binary
   rss=$(grep VmRSS /proc/${bin_pid}/status | awk '{print $2}')
-  [ ${rss} -ge 1024 ] && bin_rss="$(expr ${rss} / 1024)Mb" || bin_rss="${rss}Kb"
+  [ "${rss}" -ge 1024 ] && bin_rss="$(expr ${rss} / 1024) MB" || bin_rss="${rss} KB"
   swap=$(grep VmSwap /proc/${bin_pid}/status | awk '{print $2}')
-  [ ${swap} -ge 1024 ] && bin_swap="$(expr ${swap} / 1024)Mb" || bin_swap="${swap}Kb"
+  [ "${swap}" -ge 1024 ] && bin_swap="$(expr ${swap} / 1024) MB" || bin_swap="${swap} KB"
 
   # Get the state of the binary
   state=$(grep State /proc/${bin_pid}/status | awk '{print $2}')
@@ -342,6 +342,43 @@ crontab_alive() {
   crontab_geo
 }
 
+data_wifi() {
+  network_interface=$(settings get global mobile_data)
+  data_info=$(ifconfig rmnet_data3 | grep "RX bytes")
+  # Retrieving data usage from data information
+  data_usage=$(echo "$data_info" | awk '/RX bytes/ {print $2}' | cut -d: -f2)
+  # Convert bytes to MB/KB
+  if (( $(echo "${data_usage} > 1024 * 1024 * 1024" | bc -l) )); then
+    # Convert to GB
+    data_usage_gb=$(echo "scale=2; ${data_usage} / 1024 / 1024 / 1024" | bc)
+    log debug "Data usage: ${data_usage_gb} GB"
+  elif (( $(echo "${data_usage} > 1024 * 1024" | bc -l) )); then
+    data_usage_mb=$(echo "scale=2; ${data_usage} / 1024 / 1024" | bc)
+    log debug "Data usage: ${data_usage_mb} MB"
+  else
+    data_usage_mb=$(echo "scale=2; ${data_usage} / 1024" | bc)
+    log debug "Data usage: ${data_usage_mb} KB"
+  fi
+
+  # Run dumpsys command to get wifi usage
+  # Retrieving wifi information using ifconfig
+  wifi_info=$(ifconfig wlan0 | grep "RX bytes")
+  # Retrieve data usage from wifi information
+  wifi_usage=$(echo "$wifi_info" | awk '/RX bytes/ {print $2}' | cut -d: -f2)
+  # Konversi byte menjadi MB / KB
+  if (( $(echo "${wifi_usage} > 1024 * 1024 * 1024" | bc -l) )); then
+    # Convert to GB
+    wifi_usage_gb=$(echo "scale=2; ${wifi_usage} / 1024 / 1024 / 1024" | bc)
+    log debug "WiFi usage: ${wifi_usage_gb} GB"
+  elif (( $(echo "${wifi_usage} > 1024 * 1024" | bc -l) )); then
+    wifi_usage_mb=$(echo "scale=2; ${wifi_usage} / 1024 / 1024" | bc)
+    log debug "WiFi usage: ${wifi_usage_mb} MB"
+  else
+    wifi_usage_mb=$(echo "scale=2; ${wifi_usage} / 1024" | bc)
+    log debug "WiFi usage: ${wifi_usage_mb} KB"
+  fi
+}
+
 start_box() {
   # Mengosongkan file log dan menambahkan timestamp dan garis pembatas
   echo -n "" > "${logs_file}"
@@ -388,6 +425,7 @@ start_box() {
   sleep 1
   still_alive
   display_bin_pid
+  # data_wifi
 }
 
 stop_box() {
@@ -433,9 +471,10 @@ case "$1" in
     ${scripts_dir}/box.iptables renew
     ;;
   usage)
+    data_wifi
     case "${bin_name}" in
-      clash)echo -e "$(${bin_path} -v)";;
-      *)echo -e "$(${bin_path} version)";;
+      clash) log debug "$(${bin_path} -v)";;
+      *) log debug "$(${bin_path} version)";;
     esac
     [ $(pidof ${bin_name}) ] && \
       bin_usage || log warn "${bin_name} service is stopped"
@@ -444,3 +483,4 @@ case "$1" in
     echo "$0:  usage: $0 {start|stop|restart|usage}"
     ;;
 esac
+ 
