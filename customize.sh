@@ -79,14 +79,14 @@ mkdir -p "/data/adb/box/dashboard"
 mkdir -p "/data/adb/box/clash/dashboard"
 mkdir -p "/data/adb/box/sing-box/dashboard"
 
-ui_print "- Ekstrak file ZIP dan skip folder META-INF ke dalam folder MODPATH"
+ui_print "- Extract the ZIP file and skip the META-INF folder into the ${MODPATH} folder"
 unzip -o "${ZIPFILE}" -x 'META-INF/*' -d "${MODPATH}" >&2
 
-ui_print "- Ekstrak file uninstall.sh dan box_service.sh ke dalam folder MODPATH dan /data/adb/service.d"
+ui_print "- Extract the files uninstall.sh and box_service.sh into the ${MODPATH} folder and /data/adb/service.d"
 unzip -j -o "${ZIPFILE}" 'uninstall.sh' -d "${MODPATH}" >&2
 unzip -j -o "${ZIPFILE}" 'box_service.sh' -d /data/adb/service.d >&2
 
-ui_print "- Ekstrak file dari arsip binary dan salin ke folder /system/bin dan /data/adb/box/bin"
+ui_print "- Extract the files from the binary archive and copy them to the /system/bin and /data/adb/box/bin"
 tar -xjf "${MODPATH}/binary/${ARCH}.tar.bz2" -C "${MODPATH}/system/bin" >&2
 tar -xjf "${MODPATH}/binary/${ARCH}.tar.bz2" "mlbox" -C /data/adb/box/bin >&2
 
@@ -95,20 +95,40 @@ tar -xjf "${MODPATH}/binary/${ARCH}.tar.bz2" "mlbox" -C /data/adb/box/bin >&2
 # tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 "v2fly" -C /data/adb/box/bin >&2
 # tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 "sing-box" -C /data/adb/box/bin >&2
 
-ui_print "- Ekstrak file dashboard.zip ke dalam folder /data/adb/box/clash/dashboard dan /data/adb/box/sing-box/dashboard"
+ui_print "- Extract the dashboard.zip file to the folder /data/adb/box/clash/dashboard and /data/adb/box/sing-box/dashboard"
 unzip -o "${MODPATH}/dashboard.zip" -d /data/adb/box/dashboard/ >&2
 unzip -o "${MODPATH}/dashboard.zip" -d /data/adb/box/clash/dashboard/ >&2
 unzip -o "${MODPATH}/dashboard.zip" -d /data/adb/box/sing-box/dashboard >&2
 
-# ui_print "- Buat file resolv.conf jika belum ada dan tambahkan server nameserver"
-# if [ ! -f "/data/adb/modules/box_for_magisk/system/etc/resolv.conf" ]; then
-  # cat > "${MODPATH}/system/etc/resolv.conf" <<EOF
-# nameserver 8.8.8.8
-# nameserver 1.1.1.1
-# nameserver 9.9.9.9
-# nameserver 94.140.14.14
-# EOF
-# fi
+ui_print ""
+ui_print "--------------------------------------------------------"
+ui_print "- Are you going to create a resolve.conf file:"
+ui_print "- Vol Up = create a resolve.conf file"
+ui_print "- Vol Down = ignore file resolve.conf"
+while true ; do
+  getevent -lc 1 2>&1 | grep KEY_VOLUME > $TMPDIR/events
+  sleep 1
+  if $(cat $TMPDIR/events | grep -q KEY_VOLUMEUP) ; then
+    ui_print "- Create a resolve.conf file if it doesn't already exist and add server nameservers"
+    if [ ! -f "/data/adb/modules/box_for_magisk/system/etc/resolv.conf" ]; then
+    cat > "${MODPATH}/system/etc/resolv.conf" <<EOF
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+nameserver 9.9.9.9
+nameserver 94.140.14.14
+EOF
+    ui_print "[+] /data/adb/modules/box_for_magisk/system/etc/resolv.conf"
+    ui_print "[+] nameserver 8.8.8.8"
+    ui_print "[+] nameserver 1.1.1.1"
+    ui_print "[+] nameserver 9.9.9.9"
+    ui_print "[+] nameserver 94.140.14.14"
+    fi
+    break
+  elif $(cat $TMPDIR/events | grep -q KEY_VOLUMEDOWN) ; then
+     ui_print "- ignore creating file resolve.conf"
+    break
+  fi
+done
 
 ui_print "- Move BFM files"
 mv "$MODPATH/scripts/cacert.pem" "$MODPATH/system/etc/security/cacerts"
@@ -139,6 +159,7 @@ chmod ugo+x /data/adb/box/bin/*
 chmod ugo+x /data/adb/box/scripts/*
 chmod ugo+x ${MODPATH}/system/bin/*
 ui_print "- Installation is complete, reboot your device"
+ui_print ""
 ui_print " --- Notes --- "
 ui_print "[+] report issues to @taamarin on Telegram"
 ui_print "[+] Join @taamarin on telegram to get more updates"
