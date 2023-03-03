@@ -75,6 +75,7 @@ mkdir -p "/data/adb/box/xray"
 mkdir -p "/data/adb/box/v2fly"
 mkdir -p "/data/adb/box/sing-box"
 mkdir -p "/data/adb/box/clash"
+mkdir -p "/data/adb/box/dashboard"
 mkdir -p "/data/adb/box/clash/dashboard"
 mkdir -p "/data/adb/box/sing-box/dashboard"
 
@@ -95,20 +96,19 @@ tar -xjf "${MODPATH}/binary/${ARCH}.tar.bz2" "mlbox" -C /data/adb/box/bin >&2
 # tar -xjf ${MODPATH}/binary/${ARCH}.tar.bz2 "sing-box" -C /data/adb/box/bin >&2
 
 ui_print "- Ekstrak file dashboard.zip ke dalam folder /data/adb/box/clash/dashboard dan /data/adb/box/sing-box/dashboard"
+unzip -o "${MODPATH}/dashboard.zip" -d /data/adb/box/dashboard/ >&2
 unzip -o "${MODPATH}/dashboard.zip" -d /data/adb/box/clash/dashboard/ >&2
 unzip -o "${MODPATH}/dashboard.zip" -d /data/adb/box/sing-box/dashboard >&2
-unzip -o ${MODPATH}/dashboard.zip -d /data/adb/box/clash/dashboard/ >&2
-unzip -o ${MODPATH}/dashboard.zip -d /data/adb/box/sing-box/dashboard >&2
 
-ui_print "- Buat file resolv.conf jika belum ada dan tambahkan server nameserver"
-if [ ! -f "/data/adb/modules/box_for_magisk/system/etc/resolv.conf" ]; then
-  cat > "${MODPATH}/system/etc/resolv.conf" <<EOF
-nameserver 8.8.8.8
-nameserver 94.140.14.14
-nameserver 1.1.1.1
-nameserver 9.9.9.9
-EOF
-fi
+# ui_print "- Buat file resolv.conf jika belum ada dan tambahkan server nameserver"
+# if [ ! -f "/data/adb/modules/box_for_magisk/system/etc/resolv.conf" ]; then
+  # cat > "${MODPATH}/system/etc/resolv.conf" <<EOF
+# nameserver 8.8.8.8
+# nameserver 1.1.1.1
+# nameserver 9.9.9.9
+# nameserver 94.140.14.14
+# EOF
+# fi
 
 ui_print "- Move BFM files"
 mv "$MODPATH/scripts/cacert.pem" "$MODPATH/system/etc/security/cacerts"
